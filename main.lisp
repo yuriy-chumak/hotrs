@@ -1,13 +1,5 @@
 #!/usr/bin/ol
 
-(import (lib json))
-(import (owl parse))
-
-(define o (try-parse json-parser (force (file->bytestream "floor-1.json")) #f))
-(print (car o))
-
-
-,quit
 ; ----------------------------------
 ; зададим размеры графического окна
 (define-library (lib gl config)
@@ -111,7 +103,7 @@
 
 ; ============================================================================
 ; 1. Загрузим первый игровой уровень
-(level:load "floor-1.tmx")
+(level:load "floor-1.json")
 
 ;; ; временная функция работы с level-collision
 ;; (define collision-data (level:get-layer 'collision))
@@ -126,188 +118,6 @@
 ;;       (lref (lref collision-data y) x)))
 (define CELL-WIDTH (interact 'level ['get 'tilewidth]))
 (define CELL-HEIGHT (interact 'level ['get 'tileheight]))
-
-
-;; ;; ; =================================================================
-;; ;; ; -=( hero )=---------
-;; (define template (call/cc (lambda (return)
-;;    (ff-fold (lambda (result key value)
-;;                (print value " / " (value 'type ""))
-;;                (if (string-eq? (value 'type "") "hero") (return value)))
-;;       #false
-;;       (interact 'level ['get 'npcs])))))
-;; (print "hero template: " template)
-
-;; (define tilenames (interact 'level ['get 'tilenames]))
-
-;; (define npcs
-;;    (ff-fold (lambda (& key value)
-;;                (define npc (make-creature key #empty))
-;;                ((npc 'set-location) (cons
-;;                   (value 'x)
-;;                   (value 'y)))
-;;                ; тут надо найти какому тайлсету принадлежит этот моб
-;;                (define gid (value 'gid))
-;;                (call/cc (lambda (done)
-;;                   (let loop ((old tilenames) (tiles tilenames))
-;;                      (if (or
-;;                            (null? tiles)
-;;                            (< gid (ref (car tiles) 1)))
-;;                         (begin
-;;                            (define r (string->regex "s/^.+\\/(.+)\\..+/\\1/"))
-;;                            (define name (r (ref old 3)))
-                           
-;;                            ((npc 'set-animation-profile)
-;;                               (string->symbol name)
-;;                               (fold string-append "" (list "animations/" name ".ini")))
-                           
-;;                            (define orientation (div (- gid (ref old 1)) (ref old 2)))
-;;                            ((npc 'set-orientation) orientation)
-
-;;                            (done #t))
-;;                         (loop (car tiles) (cdr tiles))))))
-;;                ((npc 'set-current-animation) 'default)
-;;                (put & key npc))
-;;       #empty
-;;       (interact 'level ['get 'npcs])))
-
-; отдельно - герой
-
-;; (define hero-location (cons
-;;    (/ (ref (getf (interact 'level ['get 'npcs]) hero) 4) 32)
-;;    (/ (ref (getf (interact 'level ['get 'npcs]) hero) 5) 32)))
-
-;; (print "hero-location: " hero-location)
-
-;; (define hero (make-creature 'hero #empty))
-;; ; зададим позицию героя в мире
-;; ; TEMP:
-
-;; ((hero 'set-location) (cons
-;;    (/ (string->number (template 'x) 10) CELL-WIDTH)
-;;    (/ (string->number (template 'y) 10) CELL-HEIGHT)))
-
-;; ; зададим анимации герою
-;; ((hero 'set-animation-profile) 'ninja_f "animations/ninja_f.ini")
-;; ((hero 'set-current-animation) 'default)
-
-;; ((hero 'set-orientation) 0)
-
-
-;; ((hero 'set) 'state ; задать машину состояний (сразу с текущим)
-;;    (letrec ((alive (lambda (this action) ; стоим и ничего не делаем
-;;                (print "alive...")
-;;                (if action (case action
-;;                   (['go to]
-;;                      ; если появилась цель движения - перейдем в новое состояние
-;;                      (let*((creature this)
-;;                            (to to)
-;;                            (hero ((creature 'get-location)))
-;;                            (move (A* collision-data hero to)))
-;;                         (print "creature: " creature)
-;;                         (print "move: " move)
-;;                         (if move (begin
-;;                            ; пошлем его в дорогу
-;;                            (creature:move-with-animation creature move 'run #f)
-;;                         ))))
-;;                   (['hit damage]
-;;                      ((this 'set) 'health
-;;                         (- ((this 'get) 'health) 30))
-;;                      (if (> ((this 'get) 'health) 0)
-;;                         (creature:play-animation this 'hit #f)
-;;                         (creature:play-animation this 'die 'die))) ; (return dead)
-;;                      ; ...
-;;                   ))
-;;                   #false)) ; стейт герою пока не меняем
-;;             (dead (lambda (this action)
-;;                (print "i'm dead!")
-;;                ; преследование
-;;                dead)))
-;;       ; initial state
-;;       alive))
-
-;; ((hero 'set) 'health 100)
-
-;; ; ----------------------------------------------------------------------------
-;; ; -=( npcs )=-----------------
-;; (fork-server 'npcs (lambda ()
-;;    (let this ((all #null))
-;;    (let*((envelope (wait-mail))
-;;          (sender msg envelope))
-;;       (if msg
-;;          (this (cons msg all))
-;;          (begin
-;;             (mail sender all)
-;;             (this all)))))))
-
-;; (for-each (lambda (info)
-;;       (define npc (make-creature (car info) #empty))
-
-;;       ; машина состояний для npc
-;;       ((npc 'set) 'state ; задать машину состояний (сразу с текущим)
-;;          (letrec ((patrol (lambda (this action)
-;;                      ; пока патрулирование - это стояние на месте
-;;                      #false))
-
-;;                   ; -----------------------------------------------
-;;                   ; преследование героя:
-;;                   (pursuit (lambda (this action)
-;;                      (let*((creature this)
-;;                            (to ((hero 'get-location))) ; преследуем
-;;                            (me ((creature 'get-location)))
-;;                            (move (A* collision-data me to)))
-;;                         ;; (print "creature: " creature)
-;;                         (print "move: " move)
-;;                         (if move
-;;                            (print "move dist: " (inexact
-;;                               (sqrt (+
-;;                                        (* (car move) (car move))
-;;                                        (* (cdr move) (cdr move))
-;;                                     )))))
-
-;;                         ; todo: если расстояние меньше N - перейти в состояние "стреляю"
-;;                         ; todo: если расстояние больше M (или герой невидим) - перейти в состояние "патрулирую"
-;;                         ; todo: иначе идти к герою
-;;                         (if (and
-;;                               move
-;;                               (> ((hero 'get) 'health) 0))
-;;                            (let ((delta (cons
-;;                                     (- (car to) (car me))
-;;                                     (- (cdr to) (cdr me)))))
-;;                               (print "delta: " delta)
-;;                               (cond
-;;                                  ((equal? delta '(0 . -1))
-;;                                     ((creature 'set-orientation) 0)
-;;                                     (creature:play-animation creature 'shoot #f)
-;;                                     (((hero 'get) 'state) hero ['hit 30]))
-;;                                  ((equal? delta '(+1 . 0))
-;;                                     ((creature 'set-orientation) 2)
-;;                                     (creature:play-animation creature 'shoot #f)
-;;                                     (((hero 'get) 'state) hero ['hit 30]))
-;;                                  ((equal? delta '(0 . +1))
-;;                                     ((creature 'set-orientation) 4)
-;;                                     (creature:play-animation creature 'shoot #f)
-;;                                     (((hero 'get) 'state) hero ['hit 30]))
-;;                                  ((equal? delta '(-1 . 0))
-;;                                     ((creature 'set-orientation) 6)
-;;                                     (creature:play-animation creature 'shoot #f)
-;;                                     (((hero 'get) 'state) hero ['hit 30]))
-;;                                  (else
-;;                                     (creature:move-with-animation creature move 'run #f)))))
-;;                      #false)))
-;; ; ...
-;;                   (fight (lambda (this action)
-;;                      ; попытка ударить игрока
-;;                      #false)))
-;;             ; initial state
-;;             pursuit))
-
-;;       ((npc 'set-location) (cons (ref (cdr info) 3) (ref (cdr info) 4)))
-;;       ((npc 'set-animation-profile) (string->symbol (ref (cdr info) 2)) (fold string-append "animations/" (list (ref (cdr info) 2) ".ini")))
-;;       ((npc 'set-current-animation) 'stance)
-
-;;       (mail 'npcs npc))
-;;    (ff->list (level:get 'npcs)))
 
 ;; ;; ; --------------------------------------------------------------------
 ;; ;; ; окно, через которое мы смотрим на мир
@@ -560,10 +370,10 @@
    (if (key-pressed? KEY_DOWN)  (move 0 +0.031)) ; down
 
    (when (key-pressed? KEY_1) ; todo: move hero to new location
-      (level:load "floor-1.tmx"))
+      (level:load "floor-1.json"))
 
    (when (key-pressed? KEY_2) ; todo: move hero to new location
-      (level:load "floor-2.tmx"))
+      (level:load "floor-2.json"))
 
 ;;    (if (key-pressed #x3d) (resize 0.9)) ;=
 ;;    (if (key-pressed #x2d) (resize 1.1)) ;-

@@ -1,6 +1,9 @@
 (import
    (otus lisp)
    (file xml))
+(import (lib json))
+(import (owl parse))
+
 (import (scheme misc))
 (import (file ini))
 (import (only (lang intern) string->symbol))
@@ -99,85 +102,76 @@
                      ; если уровень еще не был прочитан - прочитаем:
                   else (begin
                      (for-each display (list "Loading new level '" filename "'... "))
-                     (define xml (xml-parse-file filename))
-                     (define level (car (xml-get-value xml))) ; use <map>
+
+                     (define json (try-parse json-parser (force (file->bytestream "floor-1.json")) #f))
+                     (define level (car json))
                      (print "ok.")
 
                      ; имя уровня - название файла без расширения
                      (define name ((string->regex "s/([^.]+).*/\\1/") filename))
-
-                     ; xml parser simplification
-                     (define (I xml attribute)
-                        (string->number (xml:attribute xml attribute #f) 10))
-                     (define (S xml attribute)
-                        (string->symbol (xml:attribute xml attribute #f)))
+                     (print "name: " name)
 
                      ; compiling tilesets:
-                     (define tilewidth (I level 'tilewidth)) ; ширина тайла
-                     (define tileheight (I level 'tileheight)) ; высота тайла
-                     (define width (I level 'width))  ; количество тайлов по горизонтали
-                     (define height (I level 'height)); количество тайлов по вертикали
+                     (define tilewidth (level 'tilewidth)) ; ширина тайла
+                     (define tileheight (level 'tileheight)) ; высота тайла
+                     (define width (level 'width))  ; количество тайлов по горизонтали
+                     (define height (level 'height)); количество тайлов по вертикали
 
-                     (define WIDTH (I level 'width))  ; количество тайлов по горизонтали
-                     (define HEIGHT (I level 'height)); количество тайлов по вертикали
+                     (define WIDTH (level 'width))  ; количество тайлов по горизонтали
+                     (define HEIGHT (level 'height)); количество тайлов по вертикали
 
-                     (define tilesets (xml-get-subtags level 'tileset))
+                     ; список тайлсетов
+                     (define tilesets (vector->list (level 'tilesets)))
 
                      ; список начальных номеров тайлов
-                     (define gids (pairs->ff (map (lambda (tileset)
+                     (define gids (alist->ff (map (lambda (tileset)
                            (cons
-                              (S tileset 'name)
-                              (I tileset 'firstgid)))
-                        tilesets)))
-                     ; количество колонок в тайлсете (для персонажей. отдельная строка - отдельная ориентация перса)
-                     (define columns (pairs->ff (map (lambda (tileset)
-                           (cons
-                              (string->symbol (xml-get-attribute tileset 'name "noname"))
-                              (/;(string->number (xml-get-attribute tileset 'columns "0") 10)) <- old code
-                                 (I (xml-get-subtag tileset 'image) 'width)
-                                 (I tileset 'tilewidth))))
+                              (string->symbol (tileset 'name))
+                              (tileset 'firstgid)))
                         tilesets)))
 
-                     ; тайлы: [gid ширина имя]
+                     ; количество колонок в тайлсете (для персонажей. отдельная строка - отдельная ориентация перса)
+                     (define columns (alist->ff (map (lambda (tileset)
+                           (cons
+                              (string->symbol (tileset 'name))
+                              (/ (tileset 'imagewidth)
+                                 (tileset 'tilewidth))))
+                        tilesets)))
+
+                     ; все тайлы: [gid ширина имя]
                      (define tilenames
                         (map
                            (lambda (tileset)
-                              (let ((image (xml-get-subtag tileset 'image))
-                                    (tileoffset (xml-get-subtag tileset 'tileoffset)))
-                                 (define name (xml-get-attribute image 'source "checker.png"))
-                                 (define first-gid (I tileset 'firstgid))
-                                 (define columns (/ (I image 'width) (I tileset 'tilewidth)))
+                              (define name (tileset 'image "checker.png"))
+                              (define first-gid (tileset 'firstgid))
+                              (define columns (/ (tileset 'imagewidth) (tileset 'tilewidth)))
 
-                                 [first-gid columns name]))
+                              [first-gid columns name])
                            tilesets))
 
-
                      ; make ff (id > tileset element)
+                     ; из всех тайлсетов соберем один индексированный список
                      (define tileset
                      (fold (lambda (a b)
                                  (ff-union a b #f))
                         #empty
                         (map
                            (lambda (tileset)
-                              (let ((image (xml-get-subtag tileset 'image))
-                                    (tileoffset (xml-get-subtag tileset 'tileoffset)))
-                                 (define name (xml:attribute image 'source "checker.png"))
+                              (let ((tileoffset (tileset 'tileoffset {})))
+                                 (define name (tileset 'image "checker.png"))
                                  (define id ; OpenGL texture atlas id
                                     (SOIL_load_OGL_texture (c-string name) SOIL_LOAD_RGBA SOIL_CREATE_NEW_ID 0))
-                                 (define image-width (I image 'width))
-                                 (define image-height (I image 'height))
+                                 (define image-width (tileset 'imagewidth))
+                                 (define image-height (tileset 'imageheight))
 
-                                 (define first-gid (I tileset 'firstgid))
-                                 (define tile-width (I tileset 'tilewidth))
-                                 (define tile-height (I tileset 'tileheight))
-                                 (define tile-count (I tileset 'tilecount))
-                                 (define columns (/ image-width tile-width)) ;(string->number (xml-get-attribute tileset 'columns 0) 10)) <- old
+                                 (define first-gid (tileset 'firstgid))
+                                 (define tile-width (tileset 'tilewidth))
+                                 (define tile-height (tileset 'tileheight))
+                                 (define tile-count (tileset 'tilecount))
+                                 (define columns (/ image-width tile-width))
 
-                                 (define tile-offsets (if tileoffset
-                                                         (cons
-                                                            (I tileoffset 'x)
-                                                            (I tileoffset 'y))
-                                                         '(0 . 0)))
+                                 (define tile-offsets (cons (tileoffset 'x 0)
+                                                            (tileoffset 'y 0)))
 
                                  (define tiles (fold append #null
                                     (map (lambda (row)
@@ -203,130 +197,146 @@
                            tilesets)))
 
                      ; слои
-                     (define layers (fold (lambda (ff layer)
-                                             (define name (xml:attribute layer 'name #f))
-                                             (define data (xml:value (xml-get-subtag layer 'data)))
-                                             (put ff (string->symbol name)
-                                                (map (lambda (line)
-                                                      (map (lambda (ch) (string->number ch 10))
-                                                         (split-by-comma line)))
-                                                   (split-by-newline data))))
-                                       #empty
-                                       (xml-get-subtags level 'layer)))
+                     ; todo: подумать про вектора
+                     (define layers (alist->ff (map
+                        (lambda (layer)
+                              (print layer)
+                              (define name (layer 'name))
+                              (define data (layer 'data))
+                              (define width (layer 'width))
+                              (cons (string->symbol name)
+                                    (let loop ((l #null) (data (vector->list data)))
+                                       (if (null? data)
+                                          (reverse l)
+                                          (let* ((head tail (split data width)))
+                                             (loop (cons head l) tail))))))
+                        (filter (lambda (layer) (string-eq? (layer 'type "") "tilelayer"))
+                           (vector->list (level 'layers))))))
 
-                     ; npc
-                     (define npcs
-                        (ff-fold (lambda (& key value)
-                              (define coroutine (string->symbol (fold string-append
-                                 name (list "/" ((if (symbol? key) symbol->string number->string) key)))))
-                              (define npc (make-creature coroutine value))
+                     ;; -----------------------------------------------------
+                     ; xml parser simplification
+                     ;; (define (I xml attribute)
+                     ;;    (string->number (xml:attribute xml attribute #f) 10))
+                     ;; (define (S xml attribute)
+                     ;;    (string->symbol (xml:attribute xml attribute #f)))
 
-                              ((npc 'set-location) (cons
-                                 (value 'x)
-                                 (value 'y)))
-                              ; тут надо найти какому тайлсету принадлежит этот моб
-                              (define gid (value 'gid))
-                              (call/cc (lambda (done)
-                                 (let loop ((old tilenames) (tiles tilenames))
-                                    (if (or
-                                          (null? tiles)
-                                          (< gid (ref (car tiles) 1)))
-                                       (begin
-                                          (define r (string->regex "s/^.+\\/(.+)\\..+/\\1/"))
-                                          (define name (string->symbol (r (ref old 3))))
+
+
+
+
+
+                     ;; ; npc
+                     ;; (define npcs
+                     ;;    (ff-fold (lambda (& key value)
+                     ;;          (define coroutine (string->symbol (fold string-append
+                     ;;             name (list "/" ((if (symbol? key) symbol->string number->string) key)))))
+                     ;;          (define npc (make-creature coroutine value))
+
+                     ;;          ((npc 'set-location) (cons
+                     ;;             (value 'x)
+                     ;;             (value 'y)))
+                     ;;          ; тут надо найти какому тайлсету принадлежит этот моб
+                     ;;          (define gid (value 'gid))
+                     ;;          (call/cc (lambda (done)
+                     ;;             (let loop ((old tilenames) (tiles tilenames))
+                     ;;                (if (or
+                     ;;                      (null? tiles)
+                     ;;                      (< gid (ref (car tiles) 1)))
+                     ;;                   (begin
+                     ;;                      (define r (string->regex "s/^.+\\/(.+)\\..+/\\1/"))
+                     ;;                      (define name (string->symbol (r (ref old 3))))
 
                                           
-                                          ((npc 'set-animation-profile)
-                                             name
-                                             (fold string-append "" (list "animations/" (symbol->string name) ".ini"))
-                                             (gids name)
-                                             (columns name))
+                     ;;                      ((npc 'set-animation-profile)
+                     ;;                         name
+                     ;;                         (fold string-append "" (list "animations/" (symbol->string name) ".ini"))
+                     ;;                         (gids name)
+                     ;;                         (columns name))
                                           
-                                          (define orientation (div (- gid (ref old 1)) (ref old 2)))
-                                          ((npc 'set-orientation) orientation)
+                     ;;                      (define orientation (div (- gid (ref old 1)) (ref old 2)))
+                     ;;                      ((npc 'set-orientation) orientation)
 
-                                          (done #t))
-                                       (loop (car tiles) (cdr tiles))))))
-                              ((npc 'set-current-animation) 'default)
-                              (put & key npc))
-                           {}
-                           (fold (lambda (ff objectgroup)
-                                    (fold (lambda (ff object)
-                                             (if (string-eq? (xml:attribute object 'type "") "npc") (begin
-                                                ; npc id is a name as symbol or id as integer
-                                                (define id (or
-                                                   (string->symbol (xml:attribute object 'name #false))
-                                                   (string->number (xml:attribute object 'id 999) 10)))
-                                                (print "npc id: " id)
+                     ;;                      (done #t))
+                     ;;                   (loop (car tiles) (cdr tiles))))))
+                     ;;          ((npc 'set-current-animation) 'default)
+                     ;;          (put & key npc))
+                     ;;       {}
+                     ;;       (fold (lambda (ff objectgroup)
+                     ;;                (fold (lambda (ff object)
+                     ;;                         (if (string-eq? (xml:attribute object 'type "") "npc") (begin
+                     ;;                            ; npc id is a name as symbol or id as integer
+                     ;;                            (define id (or
+                     ;;                               (string->symbol (xml:attribute object 'name #false))
+                     ;;                               (string->number (xml:attribute object 'id 999) 10)))
+                     ;;                            (print "npc id: " id)
 
-                                                (put ff id {
-                                                   'id  id
-                                                   'name (xml:attribute object 'name #f)
-                                                   'gid (I object 'gid)
-                                                   'x (/ (I object 'x) tilewidth)
-                                                   'y (/ (I object 'y) tileheight) }))
-                                             else ff))
-                                       ff
-                                       (xml-get-subtags objectgroup 'object)))
-                              {}
-                              (filter
-                                 (lambda (tag)
-                                    (string-eq? (xml:attribute tag 'name "") "objects"))
-                                 (xml-get-subtags level 'objectgroup)))))
+                     ;;                            (put ff id {
+                     ;;                               'id  id
+                     ;;                               'name (xml:attribute object 'name #f)
+                     ;;                               'gid (I object 'gid)
+                     ;;                               'x (/ (I object 'x) tilewidth)
+                     ;;                               'y (/ (I object 'y) tileheight) }))
+                     ;;                         else ff))
+                     ;;                   ff
+                     ;;                   (xml-get-subtags objectgroup 'object)))
+                     ;;          {}
+                     ;;          (filter
+                     ;;             (lambda (tag)
+                     ;;                (string-eq? (xml:attribute tag 'name "") "objects"))
+                     ;;             (xml-get-subtags level 'objectgroup)))))
 
-                     ; порталы
-                     (define portals
-                        (fold (lambda (ff objectgroup)
-                                 (fold (lambda (ff object)
-                                          (if (string-eq? (xml:attribute object 'type "") "portal") (begin
-                                             (define id (I object 'id))
+                     ;; ; порталы
+                     ;; (define portals
+                     ;;    (fold (lambda (ff objectgroup)
+                     ;;             (fold (lambda (ff object)
+                     ;;                      (if (string-eq? (xml:attribute object 'type "") "portal") (begin
+                     ;;                         (define id (I object 'id))
 
-                                             (define name (xml:attribute object 'name ""))
-                                             (define target ((string->regex "c/\\//") name))
+                     ;;                         (define name (xml:attribute object 'name ""))
+                     ;;                         (define target ((string->regex "c/\\//") name))
 
-                                             (put ff id {
-                                                'id id
-                                                'target (cons
-                                                   (string->symbol (lref target 0))
-                                                   (string->symbol (lref target 1)))
-                                                'x (/ (I object 'x) tilewidth)
-                                                'y (/ (I object 'y) tileheight)
-                                                'width  (/ (I object 'width) tilewidth)
-                                                'height (/ (I object 'height) tileheight) }))
-                                          else ff))
-                                    ff
-                                    (xml-get-subtags objectgroup 'object)))
-                           {}
-                           (filter
-                              (lambda (tag)
-                                 (string-eq? (xml-get-attribute tag 'name "") "objects"))
-                              (xml-get-subtags level 'objectgroup))))
+                     ;;                         (put ff id {
+                     ;;                            'id id
+                     ;;                            'target (cons
+                     ;;                               (string->symbol (lref target 0))
+                     ;;                               (string->symbol (lref target 1)))
+                     ;;                            'x (/ (I object 'x) tilewidth)
+                     ;;                            'y (/ (I object 'y) tileheight)
+                     ;;                            'width  (/ (I object 'width) tilewidth)
+                     ;;                            'height (/ (I object 'height) tileheight) }))
+                     ;;                      else ff))
+                     ;;                ff
+                     ;;                (xml-get-subtags objectgroup 'object)))
+                     ;;       {}
+                     ;;       (filter
+                     ;;          (lambda (tag)
+                     ;;             (string-eq? (xml-get-attribute tag 'name "") "objects"))
+                     ;;          (xml-get-subtags level 'objectgroup))))
 
-                     ; точки куда ведут порталы
-                     (define spawns
-                        (fold (lambda (ff objectgroup)
-                                 (fold (lambda (ff object)
-                                          (if (string-eq? (xml:attribute object 'type "") "spawn") (begin
-                                             (define id (or
-                                                (string->symbol (xml:attribute object 'name #false))
-                                                (string->number (xml:attribute object 'id 999) 10)))
-                                             (print "spawn id: " id)
+                     ;; ; точки куда ведут порталы
+                     ;; (define spawns
+                     ;;    (fold (lambda (ff objectgroup)
+                     ;;             (fold (lambda (ff object)
+                     ;;                      (if (string-eq? (xml:attribute object 'type "") "spawn") (begin
+                     ;;                         (define id (or
+                     ;;                            (string->symbol (xml:attribute object 'name #false))
+                     ;;                            (string->number (xml:attribute object 'id 999) 10)))
+                     ;;                         (print "spawn id: " id)
                                              
-                                             (put ff id {
-                                                'id id
-                                                'x (/ (I object 'x) tilewidth)
-                                                'y (/ (I object 'y) tileheight) }))
-                                          else ff))
-                                    ff
-                                    (xml-get-subtags objectgroup 'object)))
-                           {}
-                           (filter
-                              (lambda (tag)
-                                 (string-eq? (xml:attribute tag 'name "") "objects"))
-                              (xml-get-subtags level 'objectgroup))))
+                     ;;                         (put ff id {
+                     ;;                            'id id
+                     ;;                            'x (/ (I object 'x) tilewidth)
+                     ;;                            'y (/ (I object 'y) tileheight) }))
+                     ;;                      else ff))
+                     ;;                ff
+                     ;;                (xml-get-subtags objectgroup 'object)))
+                     ;;       {}
+                     ;;       (filter
+                     ;;          (lambda (tag)
+                     ;;             (string-eq? (xml:attribute tag 'name "") "objects"))
+                     ;;          (xml-get-subtags level 'objectgroup))))
 
                      ; парсинг и предвычисления закончены, создадим уровень
-                     (print "+++++++")
                      (define newlevel
                         (fold (lambda (ff kv) (put ff (car kv) (cdr kv))) itself `(
                            (width . ,width) (height . ,height)
@@ -336,9 +346,9 @@
                            (columns . ,columns)
                            (tileset . ,tileset)
 
-                           (npcs . ,npcs)
-                           (portals . ,portals)
-                           (spawns . ,spawns)
+                           ;(npcs . ,npcs)
+                           ;(portals . ,portals)
+                           ;(spawns . ,spawns)
 
                            (tilenames . ,tilenames)
                            (layers . ,layers))))
