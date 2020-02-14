@@ -103,7 +103,7 @@
                   else (begin
                      (for-each display (list "Loading new level '" filename "'... "))
 
-                     (define json (try-parse json-parser (force (file->bytestream "floor-1.json")) #f))
+                     (define json (try-parse json-parser (force (file->bytestream filename)) #f))
                      (define level (car json))
                      (print "ok.")
 
@@ -219,18 +219,8 @@
                      (define collision-data (list->vector
                         (map list->vector (layers 'collision))))
 
-                     ;; -----------------------------------------------------
-                     ; xml parser simplification
-                     ;; (define (I xml attribute)
-                     ;;    (string->number (xml:attribute xml attribute #f) 10))
-                     ;; (define (S xml attribute)
-                     ;;    (string->symbol (xml:attribute xml attribute #f)))
-
-
-
 
                      (for-each display (list "loading npcs ... "))
-
                      ; npc
                      (define npcs
                         (ff-fold (lambda (& key value)
@@ -290,57 +280,61 @@
                                  (lambda (layer)
                                     (string-eq? (layer 'type) "objectgroup")) ; and (layer 'name) == "objects"
                                  (vector->list (level 'layers))))))
+                     (print "ok.")
 
-                     ;; ; порталы
-                     ;; (define portals
-                     ;;    (fold (lambda (ff objectgroup)
-                     ;;             (fold (lambda (ff object)
-                     ;;                      (if (string-eq? (xml:attribute object 'type "") "portal") (begin
-                     ;;                         (define id (I object 'id))
+                     ; порталы
+                     (define portals
+                        (fold (lambda (ff objectgroup)
+                                 (fold (lambda (ff object)
+                                          (if (string-eq? (object 'type) "portal") (begin
+                                             (define name (object 'name ""))
+                                             (define target ((string->regex "c/\\//") name))
+                                             (define id (object 'id))
 
-                     ;;                         (define name (xml:attribute object 'name ""))
-                     ;;                         (define target ((string->regex "c/\\//") name))
+                                             (put ff id {
+                                                'id id
+                                                'target (cons
+                                                   (string->symbol (lref target 0))
+                                                   (string->symbol (lref target 1)))
+                                                'x (/ (object 'x) tilewidth)
+                                                'y (/ (object 'y) tileheight)
+                                                'width  (/ (object 'width) tilewidth)
+                                                'height (/ (object 'height) tileheight) }))
+                                          else ff))
+                                    ff
+                                    (vector->list (objectgroup 'objects []))))
+                           {}
+                           (filter
+                              (lambda (layer)
+                                 (string-eq? (layer 'type "") "objectgroup"))
+                              (vector->list (level 'layers)))))
 
-                     ;;                         (put ff id {
-                     ;;                            'id id
-                     ;;                            'target (cons
-                     ;;                               (string->symbol (lref target 0))
-                     ;;                               (string->symbol (lref target 1)))
-                     ;;                            'x (/ (I object 'x) tilewidth)
-                     ;;                            'y (/ (I object 'y) tileheight)
-                     ;;                            'width  (/ (I object 'width) tilewidth)
-                     ;;                            'height (/ (I object 'height) tileheight) }))
-                     ;;                      else ff))
-                     ;;                ff
-                     ;;                (xml-get-subtags objectgroup 'object)))
-                     ;;       {}
-                     ;;       (filter
-                     ;;          (lambda (tag)
-                     ;;             (string-eq? (xml-get-attribute tag 'name "") "objects"))
-                     ;;          (xml-get-subtags level 'objectgroup))))
+                     ; точки куда ведут порталы
+                     (define spawns
+                        (fold (lambda (ff objectgroup)
+                                 (fold (lambda (ff object)
+                                          (if (string-eq? (object 'type "") "spawn") (begin
+                                             (define name (object 'name ""))
 
-                     ;; ; точки куда ведут порталы
-                     ;; (define spawns
-                     ;;    (fold (lambda (ff objectgroup)
-                     ;;             (fold (lambda (ff object)
-                     ;;                      (if (string-eq? (xml:attribute object 'type "") "spawn") (begin
-                     ;;                         (define id (or
-                     ;;                            (string->symbol (xml:attribute object 'name #false))
-                     ;;                            (string->number (xml:attribute object 'id 999) 10)))
-                     ;;                         (print "spawn id: " id)
+                                             (define id (if (and (string? name) (not (string-eq? name "")))
+                                                            (string->symbol name) ; named npc?
+                                                            (object 'id)))
+                                             (print "spawn id: " id)
                                              
-                     ;;                         (put ff id {
-                     ;;                            'id id
-                     ;;                            'x (/ (I object 'x) tilewidth)
-                     ;;                            'y (/ (I object 'y) tileheight) }))
-                     ;;                      else ff))
-                     ;;                ff
-                     ;;                (xml-get-subtags objectgroup 'object)))
-                     ;;       {}
-                     ;;       (filter
-                     ;;          (lambda (tag)
-                     ;;             (string-eq? (xml:attribute tag 'name "") "objects"))
-                     ;;          (xml-get-subtags level 'objectgroup))))
+                                             (put ff id {
+                                                'id id
+                                                'x (/ (object 'x) tilewidth)
+                                                'y (/ (object 'y) tileheight) }))
+                                          else ff))
+                                    ff
+                                    (vector->list (objectgroup 'objects []))))
+                           {}
+                           (filter
+                              (lambda (layer)
+                                 (string-eq? (layer 'type "") "objectgroup"))
+                              (vector->list (level 'layers)))))
+
+                     (print "spawns: " spawns)
 
                      ; парсинг и предвычисления закончены, создадим уровень
                      (define newlevel
@@ -353,8 +347,8 @@
                            (tileset . ,tileset)
 
                            (npcs . ,npcs)
-                           ;(portals . ,portals)
-                           ;(spawns . ,spawns)
+                           (portals . ,portals)
+                           (spawns . ,spawns)
 
                            (tilenames . ,tilenames)
                            (collision-data . ,collision-data)
@@ -435,7 +429,7 @@
 
                   (define (draw-layers data1 data2 entities)
                      (map (lambda (line1 line2 j)
-                              ; отрисуем движимое
+                              ; отрисуем движимое..
                               (for-each (lambda (entity)
                                           (let ((x (car (ref entity 1)))
                                                 (y (cdr (ref entity 1))))
@@ -446,7 +440,7 @@
                                                       (car tile)
                                                       x (- y 1)))))))
                                  entities)
-                              ; и недвижимое имущество
+                              ; .. и недвижимое имущество
                               (map (lambda (tid i)
                                     ; если есть что рисовать - рисуем
                                     (unless (eq? tid 0)
@@ -484,4 +478,3 @@
             (else
                (print-to stderr "Unknown world command: " msg)
                (this itself)))))))
-

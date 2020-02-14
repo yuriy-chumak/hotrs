@@ -280,40 +280,42 @@
 
       ; герой всегда имеет имя 'hero
       (define hero ((interact 'level ['get 'npcs]) 'hero #f))
-      ;; ; ----- порталы -----------------------------
-      ;; (let*((location ((hero 'get-location)))
-      ;;       (hx (car location))
-      ;;       (hy (- (cdr location) 1))
-      ;;       (portals (ff->list (level:get 'portals))))
-      ;;    (for-each (lambda (portal)
-      ;;          (let ((x (portal 'x))
-      ;;                (y (portal 'y))
-      ;;                (width  (portal 'width))
-      ;;                (height (portal 'height)))
-      ;;             ; прямоугольники пересекаются?
-      ;;             (unless (or
-      ;;                   (< (+ hx 1) x)
-      ;;                   (< (+ hy 1) y)
-      ;;                   (> hx (+ x width))
-      ;;                   (< hy (- y height)))
-      ;;                (define target (portal 'target))
-      ;;                (define level (car target))
-      ;;                (define spawn (cdr target))
+      ; ----- порталы -----------------------------
+      (let*((location ((hero 'get-location)))
+            (hx (car location))
+            (hy (cdr location))
+            (portals (ff->alist (level:get 'portals))))
+         (for-each (lambda (portal)
+;               (print "testing portal " portal)
+               (let ((x (portal 'x))
+                     (y (portal 'y))
+                     (width  (portal 'width))
+                     (height (portal 'height)))
+                  ; прямоугольники пересекаются?
+                  (unless (or
+                        (< (+ hx 1) x)
+                        (> (- hy 1) (+ y height))
+                        (> hx (+ x width))
+                        (< hy y))
+                     (define target (portal 'target))
+                     (define level (car target))
+                     (define spawn (cdr target))
 
-      ;;                (when level
-      ;;                   (level:load (string-append (symbol->string level) ".json"))
+                     (print "target: " target)
 
-      ;;                   ; move hero to level:
-      ;;                   (level:set 'npcs
-      ;;                      (put (level:get 'npcs) 'hero hero))
+                     (when level
+                        (level:load (string-append (symbol->string level) ".json"))
 
-      ;;                   (define spawn (getf (level:get 'spawns) (cdr target)))
-      ;;                   (print "spawn: " spawn)
-      ;;                   ((hero 'set-location) (cons (spawn 'x) (spawn 'y)))
+                        ; move hero to level:
+                        (level:set 'npcs
+                           (put (level:get 'npcs) 'hero hero))
+
+                        (define spawn (getf (level:get 'spawns) (cdr target)))
+                        ((hero 'set-location) (cons (spawn 'x) (spawn 'y)))
                         
-      ;;                   )
-      ;;             )))
-      ;;       (map cdr portals)))
+                        )
+                  )))
+            (map cdr portals)))
 
    ; -------------
    ; обработчик состояния клавиатуры
@@ -444,7 +446,7 @@
 ;; ;;             (let ((creatures
 ;; ;;                      (sort (lambda (a b)
 ;; ;;                               (less? (car a) (car b)))
-;; ;;                         (ff->list (interact 'creatures ['debug])))))
+;; ;;                         (ff->alist (interact 'creatures ['debug])))))
 ;; ;; ;;             ; 1. Каждому надо выдать некотрое количество action-points (сколько действий он может выполнить за ход)
 ;; ;; ;;             ;  это, конечно же, зависит от npc - у каждого может быть разное
 ;; ;; ;;             ; TBD.
