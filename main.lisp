@@ -228,6 +228,7 @@
    (glEnable GL_BLEND)
 
    ; теперь попросим уровень отрисовать себя
+   ; (герой входит в общий список npc)
    (define creatures
       (map (lambda (creature)
             (define npc (cdr creature))
@@ -237,7 +238,7 @@
          (sort (lambda (a b)
                   (< (cdr (((cdr a) 'get-location)))
                      (cdr (((cdr b) 'get-location)))))
-               (ff->list (interact 'level ['get 'npcs])))))
+               (ff->alist (interact 'level ['get 'npcs])))))
 
    (level:draw creatures)
 
@@ -277,43 +278,42 @@
             (glVertex2f x (+ y w))
          (glEnd)))
 
-      ; герой всегда имеет индекс 1
+      ; герой всегда имеет имя 'hero
       (define hero ((interact 'level ['get 'npcs]) 'hero #f))
-      ;(print "hero: " hero)
-      ; ----- порталы -----------------------------
-      (let*((location ((hero 'get-location)))
-            (hx (car location))
-            (hy (- (cdr location) 1))
-            (portals (ff->list (level:get 'portals))))
-         (for-each (lambda (portal)
-               (let ((x (portal 'x))
-                     (y (portal 'y))
-                     (width  (portal 'width))
-                     (height (portal 'height)))
-                  ; прямоугольники пересекаются?
-                  (unless (or
-                        (< (+ hx 1) x)
-                        (< (+ hy 1) y)
-                        (> hx (+ x width))
-                        (< hy (- y height)))
-                     (define target (portal 'target))
-                     (define level (car target))
-                     (define spawn (cdr target))
+      ;; ; ----- порталы -----------------------------
+      ;; (let*((location ((hero 'get-location)))
+      ;;       (hx (car location))
+      ;;       (hy (- (cdr location) 1))
+      ;;       (portals (ff->list (level:get 'portals))))
+      ;;    (for-each (lambda (portal)
+      ;;          (let ((x (portal 'x))
+      ;;                (y (portal 'y))
+      ;;                (width  (portal 'width))
+      ;;                (height (portal 'height)))
+      ;;             ; прямоугольники пересекаются?
+      ;;             (unless (or
+      ;;                   (< (+ hx 1) x)
+      ;;                   (< (+ hy 1) y)
+      ;;                   (> hx (+ x width))
+      ;;                   (< hy (- y height)))
+      ;;                (define target (portal 'target))
+      ;;                (define level (car target))
+      ;;                (define spawn (cdr target))
 
-                     (when level
-                        (level:load (string-append (symbol->string level) ".tmx"))
+      ;;                (when level
+      ;;                   (level:load (string-append (symbol->string level) ".json"))
 
-                        ; move hero to level:
-                        (level:set 'npcs
-                           (put (level:get 'npcs) 'hero hero))
+      ;;                   ; move hero to level:
+      ;;                   (level:set 'npcs
+      ;;                      (put (level:get 'npcs) 'hero hero))
 
-                        (define spawn (getf (level:get 'spawns) (cdr target)))
-                        (print "spawn: " spawn)
-                        ((hero 'set-location) (cons (spawn 'x) (spawn 'y)))
+      ;;                   (define spawn (getf (level:get 'spawns) (cdr target)))
+      ;;                   (print "spawn: " spawn)
+      ;;                   ((hero 'set-location) (cons (spawn 'x) (spawn 'y)))
                         
-                        )
-                  )))
-            (map cdr portals)))
+      ;;                   )
+      ;;             )))
+      ;;       (map cdr portals)))
 
    ; -------------
    ; обработчик состояния клавиатуры
@@ -324,17 +324,17 @@
    ; -------------------------------------
    ;; функции работы с "тут можно ходить"
    ; временная функция работы с level-collision
-   (define collision-data (level:get-layer 'collision))
+   (define collision-data (level:get 'collision-data))
    (define W (level:get 'width)) ; ширина уровня
    (define H (level:get 'height)) ; высота уровня
 
    ; временная функция: возвращает collision data
    ;  по координатам x,y на карте
    (define (at x y)
-      (let ((x (round x))
-            (y (round y)))
-         (if (and (< -1 x W) (< -1 y H))
-            (lref (lref collision-data y) x))))
+      (let ((x (+ (round x) 1))
+            (y (+ (round y) 1)))
+         (if (and (< 0 x W) (< 0 y H))
+            (ref (ref collision-data y) x))))
 
    ; двигать героя
    (define (move dx dy)

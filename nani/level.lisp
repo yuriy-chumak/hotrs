@@ -109,7 +109,7 @@
 
                      ; имя уровня - название файла без расширения
                      (define name ((string->regex "s/([^.]+).*/\\1/") filename))
-                     (print "name: " name)
+                     (for-each display (list "processing level named " name "... "))
 
                      ; compiling tilesets:
                      (define tilewidth (level 'tilewidth)) ; ширина тайла
@@ -148,9 +148,11 @@
 
                               [first-gid columns name])
                            tilesets))
+                     (print "ok.")
 
                      ; make ff (id > tileset element)
                      ; из всех тайлсетов соберем один индексированный список
+                     (for-each display (list "preparing tileset ... "))
                      (define tileset
                      (fold (lambda (a b)
                                  (ff-union a b #f))
@@ -195,12 +197,12 @@
                                        (iota (length tiles) first-gid)
                                        tiles))))
                            tilesets)))
+                     (print "ok.")
 
                      ; слои
                      ; todo: подумать про вектора
                      (define layers (alist->ff (map
                         (lambda (layer)
-                              (print layer)
                               (define name (layer 'name))
                               (define data (layer 'data))
                               (define width (layer 'width))
@@ -213,6 +215,10 @@
                         (filter (lambda (layer) (string-eq? (layer 'type "") "tilelayer"))
                            (vector->list (level 'layers))))))
 
+                     ; для ускорения жизни collision-data сделаем вектором
+                     (define collision-data (list->vector
+                        (map list->vector (layers 'collision))))
+
                      ;; -----------------------------------------------------
                      ; xml parser simplification
                      ;; (define (I xml attribute)
@@ -223,67 +229,67 @@
 
 
 
+                     (for-each display (list "loading npcs ... "))
 
+                     ; npc
+                     (define npcs
+                        (ff-fold (lambda (& key value)
+                              (define coroutine (string->symbol (fold string-append
+                                 name (list "/" ((if (symbol? key) symbol->string number->string) key)))))
+                              (define npc (make-creature coroutine value))
 
-                     ;; ; npc
-                     ;; (define npcs
-                     ;;    (ff-fold (lambda (& key value)
-                     ;;          (define coroutine (string->symbol (fold string-append
-                     ;;             name (list "/" ((if (symbol? key) symbol->string number->string) key)))))
-                     ;;          (define npc (make-creature coroutine value))
-
-                     ;;          ((npc 'set-location) (cons
-                     ;;             (value 'x)
-                     ;;             (value 'y)))
-                     ;;          ; тут надо найти какому тайлсету принадлежит этот моб
-                     ;;          (define gid (value 'gid))
-                     ;;          (call/cc (lambda (done)
-                     ;;             (let loop ((old tilenames) (tiles tilenames))
-                     ;;                (if (or
-                     ;;                      (null? tiles)
-                     ;;                      (< gid (ref (car tiles) 1)))
-                     ;;                   (begin
-                     ;;                      (define r (string->regex "s/^.+\\/(.+)\\..+/\\1/"))
-                     ;;                      (define name (string->symbol (r (ref old 3))))
+                              ((npc 'set-location) (cons
+                                 (value 'x)
+                                 (value 'y)))
+                              ; тут надо найти какому тайлсету принадлежит этот моб
+                              (define gid (value 'gid))
+                              (call/cc (lambda (done)
+                                 (let loop ((old tilenames) (tiles tilenames))
+                                    (if (or
+                                          (null? tiles)
+                                          (< gid (ref (car tiles) 1)))
+                                       (begin
+                                          (define r (string->regex "s/^.+\\/(.+)\\..+/\\1/"))
+                                          (define name (string->symbol (r (ref old 3))))
 
                                           
-                     ;;                      ((npc 'set-animation-profile)
-                     ;;                         name
-                     ;;                         (fold string-append "" (list "animations/" (symbol->string name) ".ini"))
-                     ;;                         (gids name)
-                     ;;                         (columns name))
+                                          ((npc 'set-animation-profile)
+                                             name
+                                             (fold string-append "" (list "animations/" (symbol->string name) ".ini"))
+                                             (gids name)
+                                             (columns name))
                                           
-                     ;;                      (define orientation (div (- gid (ref old 1)) (ref old 2)))
-                     ;;                      ((npc 'set-orientation) orientation)
+                                          (define orientation (div (- gid (ref old 1)) (ref old 2)))
+                                          ((npc 'set-orientation) orientation)
 
-                     ;;                      (done #t))
-                     ;;                   (loop (car tiles) (cdr tiles))))))
-                     ;;          ((npc 'set-current-animation) 'default)
-                     ;;          (put & key npc))
-                     ;;       {}
-                     ;;       (fold (lambda (ff objectgroup)
-                     ;;                (fold (lambda (ff object)
-                     ;;                         (if (string-eq? (xml:attribute object 'type "") "npc") (begin
-                     ;;                            ; npc id is a name as symbol or id as integer
-                     ;;                            (define id (or
-                     ;;                               (string->symbol (xml:attribute object 'name #false))
-                     ;;                               (string->number (xml:attribute object 'id 999) 10)))
-                     ;;                            (print "npc id: " id)
+                                          (done #t))
+                                       (loop (car tiles) (cdr tiles))))))
+                              ((npc 'set-current-animation) 'default)
+                              (put & key npc))
+                           {}
+                           (fold (lambda (ff objectgroup)
+                                    (fold (lambda (ff object)
+                                             (if (string-eq? (object 'type) "npc") (begin
+                                                ; npc id is a name as symbol or id as integer
+                                                (define name (object 'name #false))
+                                                (define id (if (and (string? name) (not (string-eq? name "")))
+                                                               (string->symbol name) ; named npc?
+                                                               (object 'id)))
 
-                     ;;                            (put ff id {
-                     ;;                               'id  id
-                     ;;                               'name (xml:attribute object 'name #f)
-                     ;;                               'gid (I object 'gid)
-                     ;;                               'x (/ (I object 'x) tilewidth)
-                     ;;                               'y (/ (I object 'y) tileheight) }))
-                     ;;                         else ff))
-                     ;;                   ff
-                     ;;                   (xml-get-subtags objectgroup 'object)))
-                     ;;          {}
-                     ;;          (filter
-                     ;;             (lambda (tag)
-                     ;;                (string-eq? (xml:attribute tag 'name "") "objects"))
-                     ;;             (xml-get-subtags level 'objectgroup)))))
+                                                (put ff id {
+                                                   'id  id
+                                                   'name name
+                                                   'gid (object 'gid)
+                                                   'x (/ (object 'x) tilewidth)
+                                                   'y (/ (object 'y) tileheight) }))
+                                             else ff))
+                                       ff
+                                       (vector->list (objectgroup 'objects []))))
+                              {}
+                              (filter
+                                 (lambda (layer)
+                                    (string-eq? (layer 'type) "objectgroup")) ; and (layer 'name) == "objects"
+                                 (vector->list (level 'layers))))))
 
                      ;; ; порталы
                      ;; (define portals
@@ -346,11 +352,12 @@
                            (columns . ,columns)
                            (tileset . ,tileset)
 
-                           ;(npcs . ,npcs)
+                           (npcs . ,npcs)
                            ;(portals . ,portals)
                            ;(spawns . ,spawns)
 
                            (tilenames . ,tilenames)
+                           (collision-data . ,collision-data)
                            (layers . ,layers))))
                      (mail 'levels ['set fn newlevel])
                      newlevel)))
