@@ -135,13 +135,18 @@
 ;;       (set-ref! window 2 (- y h))
 ;;       (set-ref! window 3 (+ x w))
 ;;       (set-ref! window 4 (+ y h))))
-(define (move dx dy) ; сдвинуть окно
-   (let*((w (- (ref window 3) (ref window 1))) ;window width
-         (h (- (ref window 4) (ref window 2))));window height
-      (set-ref! window 1 (+ (ref window 1) (floor (* dx w))))
-      (set-ref! window 2 (- (ref window 2) (floor (* dy h))))
-      (set-ref! window 3 (+ (ref window 3) (floor (* dx w))))
-      (set-ref! window 4 (- (ref window 4) (floor (* dy h))))))
+;; (define (move-window dx dy) ; сдвинуть окно
+;;    (let*((w (- (ref window 3) (ref window 1))) ;window width
+;;          (h (- (ref window 4) (ref window 2))));window height
+;;       (set-ref! window 1 (+ (ref window 1) (floor (* dx w))))
+;;       (set-ref! window 2 (- (ref window 2) (floor (* dy h))))
+;;       (set-ref! window 3 (+ (ref window 3) (floor (* dx w))))
+;;       (set-ref! window 4 (- (ref window 4) (floor (* dy h))))))
+(define (move-window dx dy) ; сдвинуть окно
+   (set-ref! window 1 (+ (ref window 1) (floor dx)))
+   (set-ref! window 2 (- (ref window 2) (floor dy)))
+   (set-ref! window 3 (+ (ref window 3) (floor dx)))
+   (set-ref! window 4 (- (ref window 4) (floor dy))))
 
 ;; ; функция перевода экранных координат в номер тайла, на который они попадают
 ;; (define (xy:screen->tile xy)
@@ -351,9 +356,35 @@
             (eq? (at (+ (car newloc) 0.9) (+ (cdr newloc) 0.05)) 0)
             (eq? (at (+ (car newloc) 0.9) (- (cdr newloc) 0.20)) 0)
             (eq? (at (+ (car newloc) 0.1) (- (cdr newloc) 0.20)) 0))
+
+         ; левая граница
+         (let loop ()
+            (when (< (* (car newloc) (config 'scale))
+                     (+ (ref window 1) (/ (- (ref window 3) (ref window 1)) 5)))
+               (move-window -1 0)
+               (loop)))
+         ; правая граница
+         (let loop ()
+            (when (> (* (car newloc) (config 'scale))
+                     (- (ref window 3) (/ (- (ref window 3) (ref window 1)) 5)))
+               (move-window +1 0)
+               (loop)))
+         ; верхняя граница
+         (let loop ()
+            (when (< (* (cdr newloc) (config 'scale))
+                     (+ (ref window 2) (/ (- (ref window 4) (ref window 2)) 5)))
+               (move-window 0 +1)
+               (loop)))
+         ; нижняя граница
+         (let loop ()
+            (when (> (* (cdr newloc) (config 'scale))
+                     (- (ref window 4) (/ (- (ref window 4) (ref window 2)) 5)))
+               (move-window 0 -1)
+               (loop)))
+
          ((hero 'set-location)
             newloc))
-            
+
       ((hero 'set-orientation)
          (cond
             ((> dx 0) 1)
