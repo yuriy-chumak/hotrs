@@ -333,8 +333,8 @@
    ; временная функция: возвращает collision data
    ;  по координатам x,y на карте
    (define (at x y)
-      (let ((x (+ (round x) 1))
-            (y (+ (round y) 1)))
+      (let ((x (+ (floor x) 1))
+            (y (+ (floor y) 1)))
          (if (and (< 0 x W) (< 0 y H))
             (ref (ref collision-data y) x))))
 
@@ -347,10 +347,10 @@
          (+ (cdr loc) dy)))
       ; проверить можно ли ходить
       (unless (or
-            (eq? (at (+ (car newloc) 0.02) (+ (cdr newloc) 0.05)) 0)
-            (eq? (at (+ (car newloc) 0.98) (+ (cdr newloc) 0.05)) 0)
-            (eq? (at (+ (car newloc) 0.98) (- (cdr newloc) 0.20)) 0)
-            (eq? (at (+ (car newloc) 0.02) (- (cdr newloc) 0.20)) 0))
+            (eq? (at (+ (car newloc) 0.1) (+ (cdr newloc) 0.05)) 0)
+            (eq? (at (+ (car newloc) 0.9) (+ (cdr newloc) 0.05)) 0)
+            (eq? (at (+ (car newloc) 0.9) (- (cdr newloc) 0.20)) 0)
+            (eq? (at (+ (car newloc) 0.1) (- (cdr newloc) 0.20)) 0))
          ((hero 'set-location)
             newloc))
             
