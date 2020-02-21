@@ -6,11 +6,6 @@
 
 (import (scheme misc))
 (import (file ini))
-(import (only (lang intern) string->symbol))
-
-; internal staff
-   (define (number->string n)
-      (list->string (render-number n null 10)))
 
 ; public interface:
 
@@ -108,7 +103,7 @@
                      (print "ok.")
 
                      ; имя уровня - название файла без расширения
-                     (define name ((string->regex "s/([^.]+).*/\\1/") filename))
+                     (define name (s/([^.]+).*/\\1/ filename))
                      (for-each display (list "processing level named " name "... "))
 
                      ; compiling tilesets:
