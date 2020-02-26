@@ -240,7 +240,7 @@
                                           
                                           ((npc 'set-animation-profile)
                                              name
-                                             (fold string-append "" (list "animations/" (symbol->string name) ".ini"))
+                                             (fold string-append "" (list "animations/" (symbol->string name) ".json"))
                                              (gids name)
                                              (columns name))
                                           

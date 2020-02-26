@@ -87,7 +87,7 @@
 (import (lib keyboard))
 ;; (import (lib math))
 ;; (import (otus random!))
-;; (import (lang sexp))
+(import (otus random!))
 ;; (import (scheme misc))
 ;; (import (file xml))
 ;; (import (scheme dynamic-bindings))
@@ -175,6 +175,146 @@
 ;; (define (world-busy?)
 ;;    (less? 0 (unbox calculating-world)))
 
+; -----------------------------------------------------------------------------------------------
+
+; попробуем создать стейт-машину одного нпс (для примера пусть он просто бегает по карте)
+; будем гонять перса alister
+
+(define alister ((interact 'level ['get 'npcs]) 'alister))
+(print "alister: " alister)
+
+,load "nani/ai.lisp"
+; примерная стейт-машина
+;
+((alister 'set) 'state-machine { ; todo: rename to soul? ))
+   'sleep {} ; ничего не делаем, спим
+   'look-around { ; ищем куда пойти
+      'tick (lambda (ret)  ; обработчик команды
+                           ; если из обработчика приходит символ - меняем состояние на новое
+         (define location ((alister 'get-location)))
+         (define r (cons
+            (floor (car location))
+            (floor (cdr location))))
+         ; 
+         (define destination (begin
+            ; найдем новое место куда идти
+            (define collision-data (level:get 'collision-data))
+            (define W (level:get 'width)) ; ширина уровня
+            (define H (level:get 'height)) ; высота уровня
+
+            (let loop ()
+               (let ((p (cons (rand! W) (rand! H))))
+                  (if (not (eq? (ref (ref collision-data (cdr p)) (car p)) 0))
+                     (let ((step (A* (level:get 'collision-data) r p)))
+                        (if step (begin
+                           ((alister 'set) 'nextstep (cons
+                              (+ (car step) (car p))
+                              (+ (cdr step) (cdr p))))
+                           p)
+                        else (loop)))
+                     (loop))))))
+         ; все, у нас есть новая цель в жизни
+         ((alister 'set) 'destination destination)
+         ; и куда нам сделать первый шаг?..
+
+         (print "new destination: " destination)
+         'walking)
+
+   }
+   'walking { ; 'to [0 0]
+      'tick (lambda (ret)  ; обработчик команды
+                           ; если из обработчика приходит символ - меняем состояние на новое
+         (define location ((alister 'get-location)))
+         (print "location: " (inexact (car location)) ", " (inexact (cdr location)))
+         (define r (cons
+            (floor (car location))
+            (floor (cdr location))))
+         (define destination ((alister 'get) 'destination))
+         ; дошли куда хотели? поищем новую точку интереса
+         (if (equal? r destination)
+            (ret 'look-around))
+
+         ; проверим, не дошли ли до следующей намеченной точки.
+         ; если дошли, то наметим новую.
+         (define nextstep
+            (let loop ((next ((alister 'get) 'nextstep)))
+               (print "next: " next)
+               (print "r: " r)
+               (print "destination: " destination)
+               (print "(A* (level:get 'collision-data) r destination): " (A* (level:get 'collision-data) r destination))
+               (define to (or next
+                              ;(ret 'look-around)
+                              (let*((step (A* (level:get 'collision-data) r destination))
+                                    (_ (unless (print "no way") (ret 'look-around)))
+                                    (next (cons (+ (car r) (car step)) (+ (cdr r) (cdr step)))))
+                                 ((alister 'set) 'nextstep next))))
+               (if (equal? r to)
+                  (loop #false)
+                  to)))
+
+         (print "destination: " destination)
+         (print "nextstep: " nextstep)
+
+         ; хорошо, мы знаем куда надо идти, так что пойдем..
+         (define dx (- (car nextstep) (car location)))
+         (define dy (- (cdr nextstep) (cdr location)))
+         (print "dx: " dx ", dy: " dy)
+
+         (define collision-data (level:get 'collision-data))
+         (define (at x y)
+            (vector-ref (vector-ref collision-data y) x))
+
+         (define (move dx dy)
+            (print "moving per " (inexact dx) ", " (inexact dy))
+            (define newloc (cons
+               (+ (car location) dx)
+               (+ (cdr location) dy)))
+            ; проверить можно ли ходить
+            (unless (or
+                  (eq? (at (+ (car newloc) 0.1) (+ (cdr newloc) 0.05)) 0)
+                  (eq? (at (+ (car newloc) 0.9) (+ (cdr newloc) 0.05)) 0)
+                  (eq? (at (+ (car newloc) 0.9) (- (cdr newloc) 0.20)) 0)
+                  (eq? (at (+ (car newloc) 0.1) (- (cdr newloc) 0.20)) 0))
+
+               ((alister 'set-location)
+                  newloc))
+
+            ;; ((hero 'set-orientation)
+            ;;    (cond
+            ;;       ((> dx 0) 1)
+            ;;       ((< dx 0) 3)
+            ;;       ((> dy 0) 2)
+            ;;       ((< dy 0) 0)
+            ;;       (else
+            ;;          (hero 'get-orientation))))
+         )
+
+         ; ну, попробуем подвигаться..
+         (cond
+            ((> dx 0)
+               (move +0.051 0))
+            ((< dx 0)
+               (move -0.051 0)))
+         (cond
+            ((> dy 0)
+               (move 0 +0.031))
+            ((< dy 0)
+               (move 0 -0.031)))
+
+         ; остаемся в своем стейте
+         #false)
+   }
+})
+
+; живи!
+((alister 'set) 'state 'look-around)
+
+
+
+
+
+; -----------------------------------------------------------------------------------------------
+
 ; draw
 (define (playing-level-screen mouse)
 ;;    ; тут мы поворачиваем нашего героя в сторону мышки
@@ -245,7 +385,8 @@
                      (cdr (((cdr b) 'get-location)))))
                (ff->alist (interact 'level ['get 'npcs])))))
 
-   (level:draw creatures)
+   (level:draw (append creatures
+      (list [((alister 'get) 'destination) (cons 267 #f)])))
 
    ; окошки, консолька, etc.
    ;; (render-windows)
@@ -458,6 +599,25 @@
 
 (define renderer (box playing-level-screen))
 (gl:set-renderer (lambda (mouse)
+   (print "-------------------------------")
+   ; временно обработаем физику тут, потом заберем ее отдельно
+   (for-each (lambda (npc)
+         (let ((state (((cdr npc) 'get) 'state)))
+            (when state
+               (let ((state ((((cdr npc) 'get) 'state-machine) state)))
+                  (when state
+                     (let*((tick (state 'tick (lambda (ret) #f)))
+                           (new (call/cc tick)))
+                        ; если произошла смена стейта - установим его
+                        (when (symbol? new)
+                           ; todo: вызвать функции (сделай-при-выходе-из-состояния) и (сделай-при-входе-в-состояние)
+                           #false
+                           (((cdr npc) 'set) 'state new)
+                           #false
+                           )))))))
+      (ff->alist (level:get 'npcs)))
+
+   ; draw
    ((unbox renderer) mouse)))
 
 ; -- game ----------------------------------
@@ -472,69 +632,6 @@
             (set-car! renderer changing-level-screen)
             (mail sender 'ok)
             (this itself))
-
-;; ;;          (['turn]
-;; ;;             (let ((creatures
-;; ;;                      (sort (lambda (a b)
-;; ;;                               (less? (car a) (car b)))
-;; ;;                         (ff->alist (interact 'creatures ['debug])))))
-;; ;; ;;             ; 1. Каждому надо выдать некотрое количество action-points (сколько действий он может выполнить за ход)
-;; ;; ;;             ;  это, конечно же, зависит от npc - у каждого может быть разное
-;; ;; ;;             ; TBD.
-
-;; ;; ;;             ; 2. Отсортировать всех по уровню инициативности, то есть кто имеет право ударить первым
-;; ;; ;;             ;  это тоже зависит от npc
-
-;; ;; ;;             ; 3. И только теперь подергать каждого - пусть походит
-;; ;; ;;             ;  причем следующего можно дергать только после того, как отработают все запланированные анимации хода
-;; ;;             (for-each (lambda (creature)
-;; ;;                   (let*((creature (cdr creature))
-;; ;;                         (state ((creature 'get) 'state))
-;; ;;                         (_ (print "state: " state))
-;; ;;                         (state (if state (state creature #false))))
-;; ;;                      (if state
-;; ;;                         ((creature 'set) 'state state))))
-;; ;; ;;                   ; для тестов - пусть каждый скелет получает урон "-50"
-;; ;; ;;                   (ai:make-action creature 'damage 50))
-;; ;;                creatures)
-
-;; ;;             ; вроде все обработали, можно переходить в состояние "готов к следующему ходу"
-;; ;;             (set-car! calculating-world (- (unbox calculating-world) 1))
-;; ;;             (this itself)))
-;; ;; ;;          ((fire-in-the-tile xy)
-;; ;; ;;             (for-each (lambda (creature)
-;; ;; ;;                   ; для тестов - пусть каждый скелет получает урон "-50"
-;; ;; ;;                   (if (equal? (interact creature ['get 'location]) xy)
-;; ;; ;;                      (ai:make-action creature 'damage 50)))
-;; ;; ;;                (interact 'creatures ['get 'skeletons]))
-;; ;; ;;             (set-car! calculating-world #false)
-;; ;; ;;             (this itself))
-
-;;          (['go to]
-;;             (print "go to " to)
-;;             (let*((creature (interact 'creatures ['get 'hero]))
-;;                   (state ((creature 'get) 'state))
-;;                   (state (if state (state creature ['go to]))))
-;;                (if state
-;;                   ((creature 'set) 'state state)))
-
-;;             ; а теперь пускай ходят npc
-;;             (let ((creatures
-;;                      (sort (lambda (a b)
-;;                               (less? a b)) ; todo: отсортировать по инициативности
-;;                         (interact 'npcs #false))))
-;;                (for-each (lambda (creature)
-;;                      (print "NPC: " creature)
-;;                      (let*((creature creature)
-;;                            (state ((creature 'get) 'state))
-;;                            ;; (_ (print "NPC state: " state))
-;;                            (state (if state (state creature #false))))
-;;                         (if state
-;;                            ((creature 'set) 'state state))))
-;;                   creatures))
-
-;;             (set-car! calculating-world (- (unbox calculating-world) 1))
-;;             (this itself))
          (else
             (print "logic: unhandled event: " msg)
             (this itself)))))))

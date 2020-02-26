@@ -1,5 +1,7 @@
 (import (file ini))
 (import (scheme misc))
+(import (owl parse))
+(import (lib json))
 
 ;; ; поместить создание на карту
 ;; (define (creature:set-location creature location)
@@ -23,48 +25,48 @@
 ;; (define (creature:set-next-location creature location)
 ;;    (mail creature ['set-next-location location]))
 
-; отыграть цикл анимации (с ожиданием)
-(define (creature:play-animation creature animation next-animation)
-   (let ((started (time-ms))
-         (saved-animation (or next-animation ((creature 'get) 'animation)))
-         (duration ((creature 'set-current-animation) animation)))
-      (let loop ((unused #f))
-         ;(print creature ": waiting for " (- (time-ms) started))
-         (if (< (- (time-ms) started) duration)
-            (loop (sleep 7))))
-      (unless (eq? saved-animation animation)
-         ; set next animation or restore saved
-         ((creature 'set-current-animation) saved-animation))))
+;; ; отыграть цикл анимации (с ожиданием)
+;; (define (creature:play-animation creature animation next-animation)
+;;    (let ((started (time-ms))
+;;          (saved-animation (or next-animation ((creature 'get) 'animation)))
+;;          (duration ((creature 'set-current-animation) animation)))
+;;       (let loop ((unused #f))
+;;          ;(print creature ": waiting for " (- (time-ms) started))
+;;          (if (< (- (time-ms) started) duration)
+;;             (loop (sleep 7))))
+;;       (unless (eq? saved-animation animation)
+;;          ; set next animation or restore saved
+;;          ((creature 'set-current-animation) saved-animation))))
 
 ; двигаться (с анимацией)
-(define (creature:move-with-animation creature move animation next-animation)
-   (let ((started (time-ms))
-         (saved-animation (or next-animation ((creature 'get) 'animation)))
-         (location ((creature 'get-location)))
-         (duration ((creature 'set-current-animation) animation)))
+;; (define (creature:move-with-animation creature move animation next-animation)
+;;    (let ((started (time-ms))
+;;          (saved-animation (or next-animation ((creature 'get) 'animation)))
+;;          (location ((creature 'get-location)))
+;;          (duration ((creature 'set-current-animation) animation)))
 
-      (cond
-         ((equal? move '(0 . -1))
-            ((creature 'set-orientation) 0))
-         ((equal? move '(+1 . 0))
-            ((creature 'set-orientation) 2))
-         ((equal? move '(0 . +1))
-            ((creature 'set-orientation) 4))
-         ((equal? move '(-1 . 0))
-            ((creature 'set-orientation) 6)))
-      ((creature 'set-next-location) move)
-      (let loop ((unused #f))
-         ;(print creature ": waiting for " (- (time-ms) started))
-         (if (< (- (time-ms) started) duration)
-            (loop (sleep 7))))
-      ;(creature:set-next-location creature #f)
-      ((creature 'set-location) ; setting location automatically clears next-location
-         (cons (+ (car location) (car move))
-               (+ (cdr location) (cdr move))))
+;;       (cond
+;;          ((equal? move '(0 . -1))
+;;             ((creature 'set-orientation) 0))
+;;          ((equal? move '(+1 . 0))
+;;             ((creature 'set-orientation) 2))
+;;          ((equal? move '(0 . +1))
+;;             ((creature 'set-orientation) 4))
+;;          ((equal? move '(-1 . 0))
+;;             ((creature 'set-orientation) 6)))
+;;       ((creature 'set-next-location) move)
+;;       (let loop ((unused #f))
+;;          ;(print creature ": waiting for " (- (time-ms) started))
+;;          (if (< (- (time-ms) started) duration)
+;;             (loop (sleep 7))))
+;;       ;(creature:set-next-location creature #f)
+;;       ((creature 'set-location) ; setting location automatically clears next-location
+;;          (cons (+ (car location) (car move))
+;;                (+ (cdr location) (cdr move))))
 
-      (unless (eq? saved-animation animation)
-         ; set next animation or restore saved
-         ((creature 'set-current-animation) saved-animation))))
+;;       (unless (eq? saved-animation animation)
+;;          ; set next animation or restore saved
+;;          ((creature 'set-current-animation) saved-animation))))
 
 ;; ; содержит список крич, где 0..N - npc, ну или по имени (например, 'hero - герой)
 ;; (fork-server 'creatures (lambda ()
@@ -194,11 +196,15 @@
                ; конфигурирование анимации
                ;  задать имя тайловой карты и конфигурационный файл анимаций персонажа
                (make-setter (set-animation-profile this sender name ini fg columns)
-                  ;(print "name: " name)
+                  (define json (try-parse json-parser (force (file->bytestream ini)) #f))
+                  (define animations (ff-map (lambda (key value)
+                        ; make type a symbol (not a string)
+                        (put value 'type (string->symbol (value 'type "default"))))
+                     (car json)))
+
                   (let*((this (put this 'fg fg)) ;(level:get-gid name)))
-                        (this (put this 'animations (pairs->ff (ini-parse-file ini))))
+                        (this (put this 'animations animations))
                         (this (put this 'columns columns))) ;(level:get-columns name))))
-                     ;(print "name done.")
                      this))
 
                (make-getter (set-current-animation this sender animation)
@@ -210,17 +216,15 @@
                      ; (так как у нас пошаговая игра, то вызывающему надо подождать пока проиграется цикл анимации)
                      (let*((animation-info (getf (get this 'animations #empty) (getf this 'animation)))
                            (duration (getf animation-info 'duration))
-                           (duration (substring duration 0 (- (string-length duration) 2)))
-                           (duration (string->number duration 10))
-                           (frames (get animation-info 'frames "4"))
-                           (frames (string->number frames 10))
+                           (frames (get animation-info 'frames 4))
                            (animation-type (get animation-info 'type ""))
-                           (duration (if (string-eq? animation-type "back_forth")
+                           (back_forth (eq? animation-type 'back_forth))
+                           (duration (if back_forth
                                        (floor (* (+ frames frames -1)))
                                        duration)))
                            ; decoded duration in ms
                         (mail sender #|duration|#
-                           (if (string-eq? animation-type "back_forth")
+                           (if back_forth
                                  (* 100 (+ frames frames -1))
                                  (* 100 frames))
                         ))
@@ -228,46 +232,42 @@
                ; ...
                (make-getter (get-animation-frame this sender)
                   ; todo: change frames count according to animation type (and fix according math)
-                  (let*((animation (get this 'animation 'stance)) ; соответствующая состояния анимация
+                  (let*((animation (get this 'animation 'stance)) ; соответствующая состоянию анимация
                         (ssms (- (time-ms) (get this 'ssms 0))) ; количество ms с момента перехода в анимацию
                         (columns (get this 'columns 32))
                         (delta (getf this 'next-location))
                         (animations (get this 'animations #empty))
                         (animation (get animations animation #empty))
                         (animation-type (get animation 'type #false))
-                        (duration (get animation 'duration "250ms"))
-                        (duration (substring duration 0 (- (string-length duration) 2)))
-                        (duration (string->number duration 10))
-                        (frames (get animation 'frames "4"))
-                        (frames (string->number frames 10))
-                        (duration (if (string-eq? animation-type "back_forth")
+                        (duration (get animation 'duration 250))
+                        (frames (get animation 'frames 4))
+                        (back_forth (eq? animation-type 'back_forth))
+                        (duration (if back_forth
                                     (floor (* (+ frames frames -1)))
                                     duration))
-
                         (duration
-                           (if (string-eq? animation-type "back_forth")
+                           (if back_forth
                                  (* 100 (+ frames frames -1))
                                  (* 100 frames)))
 
-
-                        (position (get animation 'position "4"))
-                        (position (string->number position 10))
+                        (position (get animation 'position 0))
                         (orientation (get this 'orientation 0))
                         (frame (floor (/ (* ssms frames) duration)))
 
-                        (delta (if delta (let ((n (if (string-eq? animation-type "back_forth")
+                        (delta (if delta (let ((n (if back_forth
                                                       (+ frames frames -1)
                                                       frames)))
                            (cons (* (min frame n) (/ (car delta) n))
                                  (* (min frame n) (/ (cdr delta) n))))))
 
                         (frame (cond
-                           ((string-eq? animation-type "play_once")
+                           ((eq? animation-type 'play_once)
                               (min (- frames 1) frame))
-                           ((string-eq? animation-type "looped")
+                           ((eq? animation-type 'looped)
                               (mod frame frames))
-                           ((string-eq? animation-type "back_forth")
+                           ((eq? animation-type 'back_forth)
                               (list-ref (append (iota frames) (reverse (iota (- frames 2) 1))) (mod frame (+ frames frames -2)))))))
+
                      (mail sender (cons (+ (get this 'fg 0) position
                         frame
                         (* columns (get orientations orientation 0)))
