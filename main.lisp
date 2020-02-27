@@ -186,123 +186,153 @@
 ,load "nani/ai.lisp"
 ; примерная стейт-машина
 ;
+; если из обработчика приходит символ - меняем состояние на новое
 ((alister 'set) 'state-machine { ; todo: rename to soul? ))
-   'sleep {} ; ничего не делаем, спим
-   'look-around { ; ищем куда пойти
-      'tick (lambda (ret)  ; обработчик команды
-                           ; если из обработчика приходит символ - меняем состояние на новое
-         (define location ((alister 'get-location)))
-         (define r (cons
-            (floor (car location))
-            (floor (cdr location))))
-         ; 
-         (define destination (begin
-            ; найдем новое место куда идти
-            (define collision-data (level:get 'collision-data))
-            (define W (level:get 'width)) ; ширина уровня
-            (define H (level:get 'height)) ; высота уровня
+   'sleep { ; ничего не делаем, спим (изредка просыпаемся и ходим)
+      'tick (lambda ()
+         (let ((counter (or ((alister 'get) 'counter) 1)))
+            ((alister 'set) 'counter (+ counter 1))
+            (if (zero? (mod counter 10)) 'walking)))
+   } 
 
+   'look-around { ; ищем куда пойти
+      'tick (lambda ()  ; обработчик команды
+         ;; (print "- look-around ------------------------------")
+         ; найдем новое место куда идти
+         (define destination (begin
+            (define collision-data (level:get 'collision-data))
+            (define H (size collision-data))         ; высота карты
+            (define W (size (ref collision-data 1))) ; ширина карты
+
+            ; быстро проверим можно ли туда дойти..
             (let loop ()
-               (let ((p (cons (rand! W) (rand! H))))
-                  (if (not (eq? (ref (ref collision-data (cdr p)) (car p)) 0))
-                     (let ((step (A* (level:get 'collision-data) r p)))
-                        (if step (begin
-                           ((alister 'set) 'nextstep (cons
-                              (+ (car step) (car p))
-                              (+ (cdr step) (cdr p))))
-                           p)
-                        else (loop)))
-                     (loop))))))
+               (let ((x (rand! W))
+                     (y (rand! H)))
+                  (if (eq? (vector-ref (vector-ref collision-data y) x) 0)
+                     (loop)
+                     (cons x y))))))
          ; все, у нас есть новая цель в жизни
          ((alister 'set) 'destination destination)
-         ; и куда нам сделать первый шаг?..
-
          (print "new destination: " destination)
-         'walking)
-
+         'select-nextstep)
    }
-   'walking { ; 'to [0 0]
-      'tick (lambda (ret)  ; обработчик команды
-                           ; если из обработчика приходит символ - меняем состояние на новое
-         (define location ((alister 'get-location)))
-         (print "location: " (inexact (car location)) ", " (inexact (cdr location)))
-         (define r (cons
-            (floor (car location))
-            (floor (cdr location))))
-         (define destination ((alister 'get) 'destination))
-         ; дошли куда хотели? поищем новую точку интереса
-         (if (equal? r destination)
-            (ret 'look-around))
 
-         ; проверим, не дошли ли до следующей намеченной точки.
-         ; если дошли, то наметим новую.
-         (define nextstep
-            (let loop ((next ((alister 'get) 'nextstep)))
-               (print "next: " next)
-               (print "r: " r)
-               (print "destination: " destination)
-               (print "(A* (level:get 'collision-data) r destination): " (A* (level:get 'collision-data) r destination))
-               (define to (or next
-                              ;(ret 'look-around)
-                              (let*((step (A* (level:get 'collision-data) r destination))
-                                    (_ (unless (print "no way") (ret 'look-around)))
-                                    (next (cons (+ (car r) (car step)) (+ (cdr r) (cdr step)))))
-                                 ((alister 'set) 'nextstep next))))
-               (if (equal? r to)
-                  (loop #false)
-                  to)))
+   'select-nextstep {
+      'tick (lambda ()
+         ;; (print "- select-next-step ------------------------------")
+         (call/cc (lambda (ret)
+            (define location ((alister 'get-location)))
+            ;; (print "location: " (inexact (car location)) ", " (inexact (cdr location)))
+            (define r (cons
+               (floor (car location))
+               (floor (cdr location))))
+            (define destination ((alister 'get) 'destination))
+            ;; (print "destination: " destination)
+            ; дошли куда хотели? поищем новую точку интереса
+            (if (and ;; was: (equal? r destination)
+                  (< (- (car destination) 0) (car location) (+ (car destination) 1))
+                  (< (- (cdr destination) 2) (cdr location) (+ (cdr destination) 1)))
+               (ret 'look-around))
 
-         (print "destination: " destination)
-         (print "nextstep: " nextstep)
+            (define nextstep
+               (let ((step (A* (level:get 'collision-data) r destination)))
+                  ; сдвинем точку "ху" от начала клетки чтобы красивее ходить
+                  ; не забываем, что наши нипы имеют некоторый рост
+                  (if step (cons (+ (car step) (car r) 0.1) (+ (cdr step) (cdr r) 0.8)))))
 
-         ; хорошо, мы знаем куда надо идти, так что пойдем..
-         (define dx (- (car nextstep) (car location)))
-         (define dy (- (cdr nextstep) (cdr location)))
-         (print "dx: " dx ", dy: " dy)
+            ((alister 'set) 'nextstep nextstep)
+            ;; (print "nextstep: " (inexact (car nextstep)) ", " (inexact (cdr nextstep)))
+            ; если больше не можем дойти
+            (if (not nextstep)
+               (ret 'look-around))
 
-         (define collision-data (level:get 'collision-data))
-         (define (at x y)
-            (vector-ref (vector-ref collision-data y) x))
+            'walking)))
+   }
 
-         (define (move dx dy)
-            (print "moving per " (inexact dx) ", " (inexact dy))
-            (define newloc (cons
-               (+ (car location) dx)
-               (+ (cdr location) dy)))
-            ; проверить можно ли ходить
-            (unless (or
-                  (eq? (at (+ (car newloc) 0.1) (+ (cdr newloc) 0.05)) 0)
-                  (eq? (at (+ (car newloc) 0.9) (+ (cdr newloc) 0.05)) 0)
-                  (eq? (at (+ (car newloc) 0.9) (- (cdr newloc) 0.20)) 0)
-                  (eq? (at (+ (car newloc) 0.1) (- (cdr newloc) 0.20)) 0))
+   'walking {
+      'tick (lambda ()
+         ;; (print "- walking ------------------------------")
+         (call/cc (lambda (ret)
+            (define location ((alister 'get-location)))
+            ;; (print "location: " (inexact (car location)) ", " (inexact (cdr location)))
+            (define destination ((alister 'get) 'destination))
+            ;; (print "destination: " destination)
+            (define nextstep ((alister 'get) 'nextstep))
+            ;; (print "next: " (inexact (car nextstep)) ", " (inexact (cdr nextstep)))
 
-               ((alister 'set-location)
-                  newloc))
+            ; закончили перемещение в следующую клетку?
+            ;; (define l (cons
+            ;;    (floor (car location))
+            ;;    (floor (cdr location))))
+            ;; (print "l: " l)
+            ;; (print "l: " (cons (floor (car location)) (floor (cdr location))))
+            ;; (print "n: " (cons (floor (- (car nextstep) 0.1)) (floor (- (cdr nextstep) 0.)))) ; -0.1
+            ;; (print "cmpx: " (inexact (- (car nextstep) 0.076)) " " (inexact (car location)) " " (inexact (+ (car nextstep) 0.076)))
+            ;; (print "cmpy: " (inexact (- (cdr nextstep) 0.066)) " " (inexact (cdr location)) " " (inexact (+ (cdr nextstep) 0.066)))
+            (if (and
+                  (< (- (car nextstep) 0.076) (car location) (+ (car nextstep) 0.076))
+                  (< (- (cdr nextstep) 0.066) (cdr location) (+ (cdr nextstep) 0.066)))
+               (ret 'select-nextstep))
+            
+            ;; (if (equal?
+            ;;       (cons (floor (car location)) (floor (cdr location)))
+            ;;       (cons (floor (- (car nextstep) 0.05)) (floor (- (cdr nextstep) 0.5))))
+               ;; (ret 'select-nextstep))
 
-            ;; ((hero 'set-orientation)
-            ;;    (cond
-            ;;       ((> dx 0) 1)
-            ;;       ((< dx 0) 3)
-            ;;       ((> dy 0) 2)
-            ;;       ((< dy 0) 0)
-            ;;       (else
-            ;;          (hero 'get-orientation))))
-         )
+            ; хорошо, мы знаем куда надо идти, так что пойдем..
+            (define collision-data (level:get 'collision-data))
+            (define H (size collision-data))         ; высота карты
+            (define W (size (ref collision-data 1))) ; ширина карты
 
-         ; ну, попробуем подвигаться..
-         (cond
-            ((> dx 0)
-               (move +0.051 0))
-            ((< dx 0)
-               (move -0.051 0)))
-         (cond
-            ((> dy 0)
-               (move 0 +0.031))
-            ((< dy 0)
-               (move 0 -0.031)))
+            (define (at x y)
+               (if (and (< 0 x W) (< 0 y H))
+                  (let ((x (floor x))
+                        (y (floor y)))
+                     (vector-ref (vector-ref collision-data y) x))))
+
+            ;; (print "at " l ": " (at (car l) (cdr l)))
+            ;; (print "at n " nextstep ": " (at (car nextstep) (cdr nextstep)))
+
+            (define (move dx dy)
+               ;; (print "moving per " dx "(" (inexact dx) "), " dy "(" (inexact dy) ")")
+
+               (define location ((alister 'get-location)))
+               (define newloc (cons
+                  (+ (car location) dx)
+                  (+ (cdr location) dy)))
+
+               ; проверить можно ли ходить
+               (unless (or
+                     ;; (eq? (at (+ (car newloc) 0.077) (+ (cdr newloc) 0.065)) 0)
+                     ;; (eq? (at (+ (car newloc) 0.923) (+ (cdr newloc) 0.065)) 0)
+                     ;; (eq? (at (+ (car newloc) 0.923) (- (cdr newloc) 0.935)) 0)
+                     ;; (eq? (at (+ (car newloc) 0.077) (- (cdr newloc) 0.935)) 0)
+                     )
+                  ;; (print "newloc: " (inexact (car newloc)) ", " (inexact (cdr newloc)))
+                  ((alister 'set-location) newloc)
+                  ; и повернемся в сторону движения
+                  ((alister 'set-orientation)
+                     (cond
+                        ((> dx 0) 1)
+                        ((< dx 0) 3)
+                        ((> dy 0) 2)
+                        ((< dy 0) 0)
+                        (else
+                           (alister 'get-orientation))))))
+
+            (cond
+               ((< (car location) (- (car nextstep) 0.076))
+                  (move +0.151 0))
+               ((> (car location) (+ (car nextstep) 0.076))
+                  (move -0.151 0)))
+            (cond
+               ((< (cdr location) (- (cdr nextstep) 0.066))
+                  (move 0 +0.131))
+               ((> (cdr location) (+ (cdr nextstep) 0.066))
+                  (move 0 -0.131)))
 
          ; остаемся в своем стейте
-         #false)
+         #false))) ; 'sleep
    }
 })
 
@@ -385,8 +415,7 @@
                      (cdr (((cdr b) 'get-location)))))
                (ff->alist (interact 'level ['get 'npcs])))))
 
-   (level:draw (append creatures
-      (list [((alister 'get) 'destination) (cons 267 #f)])))
+   (level:draw (append (list [((alister 'get) 'destination) (cons 46 #f)]) creatures))
 
    ; окошки, консолька, etc.
    ;; (render-windows)
@@ -599,7 +628,6 @@
 
 (define renderer (box playing-level-screen))
 (gl:set-renderer (lambda (mouse)
-   (print "-------------------------------")
    ; временно обработаем физику тут, потом заберем ее отдельно
    (for-each (lambda (npc)
          (let ((state (((cdr npc) 'get) 'state)))
@@ -607,7 +635,8 @@
                (let ((state ((((cdr npc) 'get) 'state-machine) state)))
                   (when state
                      (let*((tick (state 'tick (lambda (ret) #f)))
-                           (new (call/cc tick)))
+                           (new (tick)))
+                        (if new (print "new state: " new))
                         ; если произошла смена стейта - установим его
                         (when (symbol? new)
                            ; todo: вызвать функции (сделай-при-выходе-из-состояния) и (сделай-при-входе-в-состояние)
