@@ -229,9 +229,11 @@
             (define destination ((alister 'get) 'destination))
             ;; (print "destination: " destination)
             ; дошли куда хотели? поищем новую точку интереса
-            (if (and ;; was: (equal? r destination)
-                  (< (- (car destination) 0) (car location) (+ (car destination) 1))
-                  (< (- (cdr destination) 2) (cdr location) (+ (cdr destination) 1)))
+            ;; (if (and ;; was: (equal? r destination)
+            ;;       (< (- (car destination) 0) (car location) (+ (car destination) 1))
+            ;;       (< (- (cdr destination) 2) (cdr location) (+ (cdr destination) 1)))
+            ;;    (ret 'look-around))
+            (if (equal? r destination)
                (ret 'look-around))
 
             (define nextstep
@@ -415,7 +417,7 @@
                      (cdr (((cdr b) 'get-location)))))
                (ff->alist (interact 'level ['get 'npcs])))))
 
-   (level:draw (append (list [((alister 'get) 'destination) (cons 46 #f)]) creatures))
+   (level:draw creatures)
 
    ; окошки, консолька, etc.
    ;; (render-windows)
@@ -636,7 +638,7 @@
                   (when state
                      (let*((tick (state 'tick (lambda (ret) #f)))
                            (new (tick)))
-                        (if new (print "new state: " new))
+                        ;(if new (print "new state: " new))
                         ; если произошла смена стейта - установим его
                         (when (symbol? new)
                            ; todo: вызвать функции (сделай-при-выходе-из-состояния) и (сделай-при-входе-в-состояние)

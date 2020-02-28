@@ -455,8 +455,12 @@
                   ; 1. фон (пол, стены, мусор на полу)
                   (draw-layer ((itself 'layers) 'background)
                      #null)
-                  ;; (draw-layer ((itself 'layers) 'collision)
-                  ;;    #null)
+
+                  ; временно нарисуем куда идет алистер
+                  (define alister ((itself 'npcs) 'alister))
+                  (if alister (let ((d ((alister 'get) 'destination)))
+                     (if d
+                        (draw-tile 26 (car d) (cdr d)))))
 
                   ; 2. теперь очередь движимых и недвижимых объектов
                   ;   так как движимые объекты должны уметь прятаться за недвижимые, то
