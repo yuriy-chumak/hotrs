@@ -456,11 +456,16 @@
                   (draw-layer ((itself 'layers) 'background)
                      #null)
 
-                  ; временно нарисуем куда идет алистер
+                  ; временно нарисуем куда идет алистер и бамби
                   (define alister ((itself 'npcs) 'alister))
                   (if alister (let ((d ((alister 'get) 'destination)))
                      (if d
                         (draw-tile 26 (car d) (cdr d)))))
+
+                  (define bambi ((itself 'npcs) 'bambi))
+                  (if bambi (let ((d ((bambi 'get) 'destination)))
+                     (if d
+                        (draw-tile 25 (car d) (cdr d)))))
 
                   ; 2. теперь очередь движимых и недвижимых объектов
                   ;   так как движимые объекты должны уметь прятаться за недвижимые, то

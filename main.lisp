@@ -180,23 +180,20 @@
 ; попробуем создать стейт-машину одного нпс (для примера пусть он просто бегает по карте)
 ; будем гонять перса alister
 
-(define alister ((interact 'level ['get 'npcs]) 'alister))
-(print "alister: " alister)
-
 ,load "nani/ai.lisp"
 ; примерная стейт-машина
 ;
 ; если из обработчика приходит символ - меняем состояние на новое
-((alister 'set) 'state-machine { ; todo: rename to soul? ))
+(define hunter-state-machine { 
    'sleep { ; ничего не делаем, спим (изредка просыпаемся и ходим)
-      'tick (lambda ()
-         (let ((counter (or ((alister 'get) 'counter) 1)))
-            ((alister 'set) 'counter (+ counter 1))
+      'tick (lambda (I)
+         (let ((counter (or ((I 'get) 'counter) 1)))
+            ((I 'set) 'counter (+ counter 1))
             (if (zero? (mod counter 10)) 'walking)))
    } 
 
    'look-around { ; ищем куда пойти
-      'tick (lambda ()  ; обработчик команды
+      'tick (lambda (I)  ; обработчик команды
          ;; (print "- look-around ------------------------------")
          ; найдем новое место куда идти
          (define destination (begin
@@ -212,22 +209,20 @@
                      (loop)
                      (cons x y))))))
          ; все, у нас есть новая цель в жизни
-         ((alister 'set) 'destination destination)
-         (print "new destination: " destination)
+         ((I 'set) 'destination destination)
+         ;; (print "new destination: " destination)
          'select-nextstep)
    }
 
    'select-nextstep {
-      'tick (lambda ()
+      'tick (lambda (I)
          ;; (print "- select-next-step ------------------------------")
          (call/cc (lambda (ret)
-            (define location ((alister 'get-location)))
-            ;; (print "location: " (inexact (car location)) ", " (inexact (cdr location)))
+            (define location ((I 'get-location)))
             (define r (cons
                (floor (car location))
                (floor (cdr location))))
-            (define destination ((alister 'get) 'destination))
-            ;; (print "destination: " destination)
+            (define destination ((I 'get) 'destination))
             ; дошли куда хотели? поищем новую точку интереса
             ;; (if (and ;; was: (equal? r destination)
             ;;       (< (- (car destination) 0) (car location) (+ (car destination) 1))
@@ -240,9 +235,9 @@
                (let ((step (A* (level:get 'collision-data) r destination)))
                   ; сдвинем точку "ху" от начала клетки чтобы красивее ходить
                   ; не забываем, что наши нипы имеют некоторый рост
-                  (if step (cons (+ (car step) (car r) 0.1) (+ (cdr step) (cdr r) 0.8)))))
+                  (if step (cons (+ (car step) (car r) 0.1) (+ (cdr step) (cdr r) 0.9)))))
 
-            ((alister 'set) 'nextstep nextstep)
+            ((I 'set) 'nextstep nextstep)
             ;; (print "nextstep: " (inexact (car nextstep)) ", " (inexact (cdr nextstep)))
             ; если больше не можем дойти
             (if (not nextstep)
@@ -252,35 +247,22 @@
    }
 
    'walking {
-      'tick (lambda ()
+      'tick (lambda (I)
          ;; (print "- walking ------------------------------")
          (call/cc (lambda (ret)
-            (define location ((alister 'get-location)))
+            (define location ((I 'get-location)))
             ;; (print "location: " (inexact (car location)) ", " (inexact (cdr location)))
-            (define destination ((alister 'get) 'destination))
+            (define destination ((I 'get) 'destination))
             ;; (print "destination: " destination)
-            (define nextstep ((alister 'get) 'nextstep))
+            (define nextstep ((I 'get) 'nextstep))
             ;; (print "next: " (inexact (car nextstep)) ", " (inexact (cdr nextstep)))
 
             ; закончили перемещение в следующую клетку?
-            ;; (define l (cons
-            ;;    (floor (car location))
-            ;;    (floor (cdr location))))
-            ;; (print "l: " l)
-            ;; (print "l: " (cons (floor (car location)) (floor (cdr location))))
-            ;; (print "n: " (cons (floor (- (car nextstep) 0.1)) (floor (- (cdr nextstep) 0.)))) ; -0.1
-            ;; (print "cmpx: " (inexact (- (car nextstep) 0.076)) " " (inexact (car location)) " " (inexact (+ (car nextstep) 0.076)))
-            ;; (print "cmpy: " (inexact (- (cdr nextstep) 0.066)) " " (inexact (cdr location)) " " (inexact (+ (cdr nextstep) 0.066)))
             (if (and
                   (< (- (car nextstep) 0.076) (car location) (+ (car nextstep) 0.076))
                   (< (- (cdr nextstep) 0.066) (cdr location) (+ (cdr nextstep) 0.066)))
                (ret 'select-nextstep))
             
-            ;; (if (equal?
-            ;;       (cons (floor (car location)) (floor (cdr location)))
-            ;;       (cons (floor (- (car nextstep) 0.05)) (floor (- (cdr nextstep) 0.5))))
-               ;; (ret 'select-nextstep))
-
             ; хорошо, мы знаем куда надо идти, так что пойдем..
             (define collision-data (level:get 'collision-data))
             (define H (size collision-data))         ; высота карты
@@ -292,13 +274,8 @@
                         (y (floor y)))
                      (vector-ref (vector-ref collision-data y) x))))
 
-            ;; (print "at " l ": " (at (car l) (cdr l)))
-            ;; (print "at n " nextstep ": " (at (car nextstep) (cdr nextstep)))
-
             (define (move dx dy)
-               ;; (print "moving per " dx "(" (inexact dx) "), " dy "(" (inexact dy) ")")
-
-               (define location ((alister 'get-location)))
+               (define location ((I 'get-location)))
                (define newloc (cons
                   (+ (car location) dx)
                   (+ (cdr location) dy)))
@@ -310,17 +287,16 @@
                      ;; (eq? (at (+ (car newloc) 0.923) (- (cdr newloc) 0.935)) 0)
                      ;; (eq? (at (+ (car newloc) 0.077) (- (cdr newloc) 0.935)) 0)
                      )
-                  ;; (print "newloc: " (inexact (car newloc)) ", " (inexact (cdr newloc)))
-                  ((alister 'set-location) newloc)
+                  ((I 'set-location) newloc)
                   ; и повернемся в сторону движения
-                  ((alister 'set-orientation)
+                  ((I 'set-orientation)
                      (cond
                         ((> dx 0) 1)
                         ((< dx 0) 3)
                         ((> dy 0) 2)
                         ((< dy 0) 0)
                         (else
-                           (alister 'get-orientation))))))
+                           (I 'get-orientation))))))
 
             (cond
                ((< (car location) (- (car nextstep) 0.076))
@@ -339,7 +315,15 @@
 })
 
 ; живи!
+(define alister ((interact 'level ['get 'npcs]) 'alister))
+(print "alister: " alister)
+((alister 'set) 'state-machine hunter-state-machine) ; todo: rename to soul? ))
 ((alister 'set) 'state 'look-around)
+
+(define bambi ((interact 'level ['get 'npcs]) 'bambi))
+(print "bambi: " bambi)
+((bambi 'set) 'state-machine hunter-state-machine) ; todo: rename to soul? ))
+((bambi 'set) 'state 'look-around)
 
 
 
@@ -631,20 +615,20 @@
 (define renderer (box playing-level-screen))
 (gl:set-renderer (lambda (mouse)
    ; временно обработаем физику тут, потом заберем ее отдельно
-   (for-each (lambda (npc)
-         (let ((state (((cdr npc) 'get) 'state)))
+   (for-each (lambda (pair)
+         (define npc (cdr pair))
+         (let ((state ((npc 'get) 'state)))
             (when state
-               (let ((state ((((cdr npc) 'get) 'state-machine) state)))
+               (let ((state (((npc 'get) 'state-machine) state)))
                   (when state
-                     (let*((tick (state 'tick (lambda (ret) #f)))
-                           (new (tick)))
+                     (let*((tick (state 'tick (lambda (I) #f)))
+                           (new (tick npc)))
                         ;(if new (print "new state: " new))
                         ; если произошла смена стейта - установим его
                         (when (symbol? new)
-                           ; todo: вызвать функции (сделай-при-выходе-из-состояния) и (сделай-при-входе-в-состояние)
-                           #false
-                           (((cdr npc) 'set) 'state new)
-                           #false
+                           #false ; todo: вызвать функцию (сделай-при-выходе-из-состояния)
+                           ((npc 'set) 'state new)
+                           #false ; todo: вызвать функцию (сделай-при-входе-в-состояние)
                            )))))))
       (ff->alist (level:get 'npcs)))
 
