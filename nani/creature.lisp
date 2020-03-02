@@ -1,7 +1,7 @@
 (import (file ini))
 (import (scheme misc))
 (import (owl parse))
-(import (lib json))
+(import (file json))
 
 ;; ; поместить создание на карту
 ;; (define (creature:set-location creature location)

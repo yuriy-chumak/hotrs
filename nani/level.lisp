@@ -1,7 +1,7 @@
 (import
    (otus lisp)
    (file xml))
-(import (lib json))
+(import (file json))
 (import (owl parse))
 
 (import (scheme misc))
