@@ -59,25 +59,46 @@
 (import (---))
 (enable-vsync)
 
-;; ; -------------------------------------------------------
-;; ; теперь запустим текстовую консольку
-;; (import (lib gl console))
+; -------------------------------------------------------
+; теперь запустим текстовую консольку
+(import (lib gl console))
 
-;; ; временное окно дебага (покажем fps):
-;; (define fps (create-window 70 24 10 1))
-;; (define started (time-ms)) (define time '(0))
-;; (define frames '(0 . 0))
+; временное окно дебага (покажем fps):
+(define fps (create-window 50 24 10 1))
+(define started (time-ms)) (define time '(0))
+(define frames '(0 . 0))
 
-;; (set-window-writer fps (lambda (print)
-;;    (set-car! frames (+ (car frames) 1))
-;;    (let ((now (time-ms)))
-;;       (if (> now (+ started (car time) 1000))
-;;          (begin
-;;             (set-cdr! frames (car frames))
-;;             (set-car! frames 0)
-;;             (set-car! time (- now started)))))
-;;    (print GRAY (cdr frames) " fps")
-;; ))
+(define npc-targets '(0 . 0))
+
+(set-window-writer fps (lambda (print)
+   (set-car! frames (+ (car frames) 1))
+   (let ((now (time-ms)))
+      (if (> now (+ started (car time) 1000))
+         (begin
+            (set-cdr! frames (car frames))
+            (set-car! frames 0)
+            (set-car! time (- now started)))))
+   (print GREEN (car npc-targets) "    ")
+   (print GRAY (cdr frames) " fps")
+))
+
+(define info (create-window 0 0 20 1))
+(fork-server 'meet (lambda ()
+   (let this ((itself #false))
+      (let*((envelope (wait-mail))
+            (sender msg envelope))
+         (this
+            (if msg msg (begin (mail sender itself) itself)))))))
+(set-window-writer info (lambda (print)
+   (let ((meet (interact 'meet #false)))
+      (if (string? meet)
+         (print "Hello, " meet "!")))))
+
+
+(define gathered-window (create-window 3 23 20 1))
+(define gathered (cons 0 0))
+(set-window-writer gathered-window (lambda (print)
+   (print "Alister got " (car gathered) " coins, and Bambi got " (cdr gathered) " coins.")))
 
 ; ----------------
 ; музычка...
@@ -228,7 +249,8 @@
             ;;       (< (- (car destination) 0) (car location) (+ (car destination) 1))
             ;;       (< (- (cdr destination) 2) (cdr location) (+ (cdr destination) 1)))
             ;;    (ret 'look-around))
-            (if (equal? r destination)
+            (when (equal? r destination)
+               (((I 'get) 'gotcha))
                (ret 'look-around))
 
             (define nextstep
@@ -319,11 +341,13 @@
 (print "alister: " alister)
 ((alister 'set) 'state-machine hunter-state-machine) ; todo: rename to soul? ))
 ((alister 'set) 'state 'look-around)
+((alister 'set) 'gotcha (lambda () (set-car! gathered (+ (car gathered) 1))))
 
 (define bambi ((interact 'level ['get 'npcs]) 'bambi))
 (print "bambi: " bambi)
 ((bambi 'set) 'state-machine hunter-state-machine) ; todo: rename to soul? ))
 ((bambi 'set) 'state 'look-around)
+((bambi 'set) 'gotcha (lambda () (set-cdr! gathered (+ (cdr gathered) 1))))
 
 
 
@@ -404,7 +428,7 @@
    (level:draw creatures)
 
    ; окошки, консолька, etc.
-   ;; (render-windows)
+   (render-windows)
 
    ; let's draw mouse pointer
    (glScalef (/ 1 (config 'scale 40)) (/ 1 (config 'scale 40)) 1)
@@ -477,6 +501,27 @@
                         )
                   )))
             (map cdr portals)))
+
+   ; -------------
+   ; а не хотим ли мы с кем-нибудь пообщаться?
+      (mail 'meet (call/cc (lambda (return)
+         (let*((location ((hero 'get-location)))
+               (hx (car location))
+               (hy (cdr location)))
+            (for-each (lambda (pair)
+                  (define name (car pair))
+                  (unless (eq? name 'hero)
+                     (define npc (((cdr pair) 'debug)))
+                     (let*((x y (uncons (npc 'location) #f)))
+                        (unless (or
+                              (< (+ hx 1) x)
+                              (> (- hy 1) (+ y 1))
+                              (> hx (+ x 1))
+                              (< hy y))
+                           (return (symbol->string name))))))
+               (ff->alist (level:get 'npcs))))
+         #null)))
+
 
    ; -------------
    ; обработчик состояния клавиатуры
