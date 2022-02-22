@@ -36,69 +36,71 @@
       '((0 . 0) (1 . 0) (1 . 1) (0 . 1)))
 (glEnd)
 (glDisable GL_TEXTURE_2D)
-(gl:SwapBuffers (interact 'opengl ['get 'context])) ; todo: make a function
+(gl:SwapBuffers (await (mail 'opengl ['get 'context]))) ; todo: make a function
 (glDeleteTextures 1 (list id)) ; и спокойно удалим сплеш текстуру
 
 ; ----------------------------------------------------------
-; включим для windows VSYNC,
-; для linux он включен по умолчанию 
-;
-(define-library (---)
-(export enable-vsync)
-(import (scheme core))
+(define-library (enable vsync)
+(export)
+(import (scheme core)
+   (owl async))
 (cond-expand
    (Windows
       (import (OpenGL WGL EXT swap_control))
       (begin
-         (define (enable-vsync)
-            (if WGL_EXT_swap_control
-               (wglSwapIntervalEXT 1))))) ; enable vsync
+         (if WGL_EXT_swap_control
+            (wglSwapIntervalEXT 1))))
    (else
+      (import (OpenGL GLX EXT swap_control))
       (begin
-         (define (enable-vsync) #false)))))
-(import (---))
-(enable-vsync)
+         (define context (await (mail 'opengl ['get 'context]))) ; todo: make a function
 
-; -------------------------------------------------------
-; теперь запустим текстовую консольку
-(import (lib gl console))
+         ; https://gist.github.com/Cloudef/9103499
+         (if (and context glXSwapIntervalEXT)
+            (glXSwapIntervalEXT (ref context 1) (ref context 3) 1))))))
 
-; временное окно дебага (покажем fps):
-(define fps (create-window 50 24 10 1))
-(define started (time-ms)) (define time '(0))
-(define frames '(0 . 0))
+;; ; -------------------------------------------------------
+;; ; теперь запустим текстовую консольку
+;; (import (lib gl console))
+;; (import (scheme dynamic-bindings))
+; (define *guess* (make-parameter #f))
 
-(define npc-targets '(0 . 0))
+;; ; временное окно дебага (покажем fps):
+;; (define fps (create-window 50 24 10 1))
+;; (define started (time-ms)) (define time '(0))
+;; (define frames '(0 . 0))
 
-(set-window-writer fps (lambda (print)
-   (set-car! frames (+ (car frames) 1))
-   (let ((now (time-ms)))
-      (if (> now (+ started (car time) 1000))
-         (begin
-            (set-cdr! frames (car frames))
-            (set-car! frames 0)
-            (set-car! time (- now started)))))
-   (print GREEN (car npc-targets) "    ")
-   (print GRAY (cdr frames) " fps")
-))
+;; (define npc-targets '(0 . 0))
 
-(define info (create-window 0 0 20 1))
-(fork-server 'meet (lambda ()
-   (let this ((itself #false))
-      (let*((envelope (wait-mail))
-            (sender msg envelope))
-         (this
-            (if msg msg (begin (mail sender itself) itself)))))))
-(set-window-writer info (lambda (print)
-   (let ((meet (interact 'meet #false)))
-      (if (string? meet)
-         (print "Hello, " meet "!")))))
+;; (set-window-writer fps (lambda (print)
+;;    (set-car! frames (+ (car frames) 1))
+;;    (let ((now (time-ms)))
+;;       (if (> now (+ started (car time) 1000))
+;;          (begin
+;;             (set-cdr! frames (car frames))
+;;             (set-car! frames 0)
+;;             (set-car! time (- now started)))))
+;;    (print GREEN (car npc-targets) "    ")
+;;    (print GRAY (cdr frames) " fps")
+;; ))
+
+;; (define info (create-window 0 0 20 1))
+;; (coroutine 'meet (lambda ()
+;;    (let this ((itself #false))
+;;       (let*((envelope (wait-mail))
+;;             (sender msg envelope))
+;;          (this
+;;             (if msg msg (begin (mail sender itself) itself)))))))
+;; (set-window-writer info (lambda (print)
+;;    (let ((meet (await (mail 'meet #false))))
+;;       (if (string? meet)
+;;          (print "Hello, " meet "!")))))
 
 
-(define gathered-window (create-window 3 23 20 1))
-(define gathered (cons 0 0))
-(set-window-writer gathered-window (lambda (print)
-   (print "Alister got " (car gathered) " coins, and Bambi got " (cdr gathered) " coins.")))
+;; (define gathered-window (create-window 3 23 20 1))
+;; (define gathered (cons 0 0))
+;; (set-window-writer gathered-window (lambda (print)
+;;    (print "Alister got " (car gathered) " coins, and Bambi got " (cdr gathered) " coins.")))
 
 ; ----------------
 ; музычка...
@@ -137,8 +139,8 @@
 ;; (define (at x y)
 ;;    (if (and (< -1 x W) (< -1 y H))
 ;;       (lref (lref collision-data y) x)))
-(define CELL-WIDTH (interact 'level ['get 'tilewidth]))
-(define CELL-HEIGHT (interact 'level ['get 'tileheight]))
+(define CELL-WIDTH (await (mail 'level ['get 'tilewidth])))
+(define CELL-HEIGHT (await (mail 'level ['get 'tileheight])))
 
 ;; ;; ; --------------------------------------------------------------------
 ;; ;; ; окно, через которое мы смотрим на мир
@@ -337,26 +339,34 @@
 })
 
 ; живи!
-(define alister ((interact 'level ['get 'npcs]) 'alister))
+(define alister ((await (mail 'level ['get 'npcs])) 'alister))
 (print "alister: " alister)
 ((alister 'set) 'state-machine hunter-state-machine) ; todo: rename to soul? ))
 ((alister 'set) 'state 'look-around)
-((alister 'set) 'gotcha (lambda () (set-car! gathered (+ (car gathered) 1))))
+((alister 'set) 'gotcha (lambda () #|(set-car! gathered (+ (car gathered) 1))|# #f))
 
-(define bambi ((interact 'level ['get 'npcs]) 'bambi))
+(define bambi ((await (mail 'level ['get 'npcs])) 'bambi))
 (print "bambi: " bambi)
 ((bambi 'set) 'state-machine hunter-state-machine) ; todo: rename to soul? ))
 ((bambi 'set) 'state 'look-around)
-((bambi 'set) 'gotcha (lambda () (set-cdr! gathered (+ (cdr gathered) 1))))
+((bambi 'set) 'gotcha (lambda () #|(set-cdr! gathered (+ (cdr gathered) 1))|# #f))
 
 
 
 
 
 ; -----------------------------------------------------------------------------------------------
+(define time (box (cdr (syscall 96))))
 
 ; draw
 (define (playing-level-screen mouse)
+   (define delta ; in usec (microseconds)
+      (let*((ss us (uncons (syscall 96) #f)))
+         (define delta (mod (+ (- us (unbox time)) 1000000) 1000000)) ; мы не ожидаем задержку больше чем 1 секунда
+         (set-car! time us)
+         delta))
+
+
 ;;    ; тут мы поворачиваем нашего героя в сторону мышки
 ;;    (unless (world-busy?) (if (> ((hero 'get) 'health) 0)
 ;;       (let*((mousetile (xy:screen->tile mouse))
@@ -397,7 +407,7 @@
 ;; ;;             ;; ; просто перед рисованием убедимся что они все закончили свою работу
 ;; ;;             ;; (for-each (lambda (id)
 ;; ;;             ;;       (mail id ['process-event-transition-tick]))
-;; ;;             ;;    (interact 'creatures ['get 'skeletons]))
+;; ;;             ;;    (await (mail 'creatures ['get 'skeletons])))
 ;; ;;          )))
 
    ; теперь можем и порисовать: очистим окно и подготовим оконную математику
@@ -423,20 +433,21 @@
          (sort (lambda (a b)
                   (< (cdr (((cdr a) 'get-location)))
                      (cdr (((cdr b) 'get-location)))))
-               (ff->alist (interact 'level ['get 'npcs])))))
+               (ff->alist (await (mail 'level ['get 'npcs]))))))
 
+   ;; (print "creatures: " creatures)
    (level:draw creatures)
 
    ; окошки, консолька, etc.
-   (render-windows)
+   ;; (render-windows)
 
    ; let's draw mouse pointer
    (glScalef (/ 1 (config 'scale 40)) (/ 1 (config 'scale 40)) 1)
-   (if mouse
-      (let*(;(ms (mod (floor (/ (time-ms) 100)) 40))
-            (viewport '(0 0 0 0))
-            (_ (glGetIntegerv GL_VIEWPORT viewport))
-            (tile (getf (level:get 'tileset)
+   (when mouse
+      (define viewport '(0 0 0 0))
+      (glGetIntegerv GL_VIEWPORT viewport)
+
+      (let*((tile (getf (level:get 'tileset)
                         (+ (level:get-gid 'pointer)
                            (if (world-busy?) 1 0))))
             (w (config 'scale 40)) ;(- (ref window 3) (ref window 1))) ;  размер курсора
@@ -464,7 +475,7 @@
          (glEnd)))
 
       ; герой всегда имеет имя 'hero
-      (define hero ((interact 'level ['get 'npcs]) 'hero #f))
+      (define hero ((await (mail 'level ['get 'npcs])) 'hero #f))
       ; ----- порталы -----------------------------
       (let*((location ((hero 'get-location)))
             (hx (car location))
@@ -502,32 +513,33 @@
                   )))
             (map cdr portals)))
 
+
    ; -------------
    ; а не хотим ли мы с кем-нибудь пообщаться?
-      (mail 'meet (call/cc (lambda (return)
-         (let*((location ((hero 'get-location)))
-               (hx (car location))
-               (hy (cdr location)))
-            (for-each (lambda (pair)
-                  (define name (car pair))
-                  (unless (eq? name 'hero)
-                     (define npc (((cdr pair) 'debug)))
-                     (let*((x y (uncons (npc 'location) #f)))
-                        (unless (or
-                              (< (+ hx 1) x)
-                              (> (- hy 1) (+ y 1))
-                              (> hx (+ x 1))
-                              (< hy y))
-                           (return (symbol->string name))))))
-               (ff->alist (level:get 'npcs))))
-         #null)))
+      ;; (mail 'meet (call/cc (lambda (return)
+      ;;    (let*((location ((hero 'get-location)))
+      ;;          (hx (car location))
+      ;;          (hy (cdr location)))
+      ;;       (for-each (lambda (pair)
+      ;;             (define name (car pair))
+      ;;             (unless (eq? name 'hero)
+      ;;                (define npc (((cdr pair) 'debug)))
+      ;;                (let*((x y (uncons (npc 'location) #f)))
+      ;;                   (unless (or
+      ;;                         (< (+ hx 1) x)
+      ;;                         (> (- hy 1) (+ y 1))
+      ;;                         (> hx (+ x 1))
+      ;;                         (< hy y))
+      ;;                      (return (symbol->string name))))))
+      ;;          (ff->alist (level:get 'npcs))))
+      ;;    #null)))
 
 
    ; -------------
    ; обработчик состояния клавиатуры
    ;  внимание, это "состояние", а не "события"!
    ;  посему можно обрабатывать сразу несколько нажатий клавиатуры одновременно
-   (if (key-pressed? KEY_ESC) (halt 1))
+   (if (key-pressed? KEY_ESC) (halt 0))
 
    ; -------------------------------------
    ;; функции работы с "тут можно ходить"
@@ -596,18 +608,17 @@
                (hero 'get-orientation))))
    )
 
+   ;; todo: дебаг-интерфейс, позволяющий двигать окно просмотра по всей карте:
+   (if (key-pressed? KEY_RIGHT) (move   (*    0.00392 delta) 0)) ; right +0.051
+   (if (key-pressed? KEY_LEFT)  (move   (- (* 0.00392 delta)) 0)) ; left +0.051
+   (if (key-pressed? KEY_UP)    (move 0 (- (* 0.00238 delta)))) ; up
+   (if (key-pressed? KEY_DOWN)  (move 0 (*    0.00238 delta))) ; down
 
-   ; дебаг-интерфейс, позволяющий двигать окно просмотра по всей карте:
-   (if (key-pressed? KEY_RIGHT) (move +0.051 0)) ; right
-   (if (key-pressed? KEY_LEFT)  (move -0.051 0)) ; left
-   (if (key-pressed? KEY_UP)    (move 0 -0.031)) ; up
-   (if (key-pressed? KEY_DOWN)  (move 0 +0.031)) ; down
+   ;; (when (key-pressed? KEY_1) ; todo: move hero to new location
+   ;;    (level:load "floor-1.json"))
 
-   (when (key-pressed? KEY_1) ; todo: move hero to new location
-      (level:load "floor-1.json"))
-
-   (when (key-pressed? KEY_2) ; todo: move hero to new location
-      (level:load "floor-2.json"))
+   ;; (when (key-pressed? KEY_2) ; todo: move hero to new location
+   ;;    (level:load "floor-2.json"))
 
 ;;    (if (key-pressed #x3d) (resize 0.9)) ;=
 ;;    (if (key-pressed #x2d) (resize 1.1)) ;-
@@ -626,15 +637,94 @@
 ;; ;; ; --------------------------------------------
 
 
-;; ;; ; keyboard
-;; ;; ; обработчик событий клавиатуры
-;; ;; ;  внимание, это "события", а не "состояние"!!!
-;; (gl:set-keyboard-handler (lambda (key)
-;;    (print "key: " key)))
-;;    ;; (case key
-;;    ;;    (#x18
-;;    ;;       ;(mail 'music ['shutdown])
-;;    ;;       (halt 1))))) ; q - quit
+;; ; keyboard
+;; ; обработчик событий клавиатуры
+;; ;  внимание, это "события", а не "состояние"!!!
+(gl:set-keyboard-handler (lambda (key)
+   (print "key: " key)
+
+   ;; ; карта
+   ;; (define collision-data (level:get 'collision-data))
+   ;; (define W (level:get 'width)) ; ширина уровня
+   ;; (define H (level:get 'height)) ; высота уровня
+
+   ;; ; временная функция: возвращает collision data
+   ;; ;  по координатам x,y на карте
+   ;; (define (at x y)
+   ;;    (let ((x (+ (floor x) 1))
+   ;;          (y (+ (floor y) 1)))
+   ;;       (if (and (< 0 x W) (< 0 y H))
+   ;;          (ref (ref collision-data y) x))))
+
+   ;; ; герой собственной персоной
+   ;; (define hero ((await (mail 'level ['get 'npcs])) 'hero #f))
+
+   ;; ; двигать героя
+   ;; (define (move dx dy)
+   ;;    (define loc ((hero 'get-location)))
+
+   ;;    (define newloc (cons
+   ;;       (+ (car loc) dx)
+   ;;       (+ (cdr loc) dy)))
+   ;;    ; проверить можно ли ходить
+   ;;    (unless (or
+   ;;          (eq? (at (+ (car newloc) 0.1) (+ (cdr newloc) 0.05)) 0)
+   ;;          (eq? (at (+ (car newloc) 0.9) (+ (cdr newloc) 0.05)) 0)
+   ;;          (eq? (at (+ (car newloc) 0.9) (- (cdr newloc) 0.20)) 0)
+   ;;          (eq? (at (+ (car newloc) 0.1) (- (cdr newloc) 0.20)) 0))
+
+   ;;       ; левая граница
+   ;;       (let loop ()
+   ;;          (when (< (* (car newloc) (config 'scale))
+   ;;                   (+ (ref window 1) (/ (- (ref window 3) (ref window 1)) 5)))
+   ;;             (move-window -1 0)
+   ;;             (loop)))
+   ;;       ; правая граница
+   ;;       (let loop ()
+   ;;          (when (> (* (car newloc) (config 'scale))
+   ;;                   (- (ref window 3) (/ (- (ref window 3) (ref window 1)) 5)))
+   ;;             (move-window +1 0)
+   ;;             (loop)))
+   ;;       ; верхняя граница
+   ;;       (let loop ()
+   ;;          (when (< (* (cdr newloc) (config 'scale))
+   ;;                   (+ (ref window 2) (/ (- (ref window 4) (ref window 2)) 5)))
+   ;;             (move-window 0 +1)
+   ;;             (loop)))
+   ;;       ; нижняя граница
+   ;;       (let loop ()
+   ;;          (when (> (* (cdr newloc) (config 'scale))
+   ;;                   (- (ref window 4) (/ (- (ref window 4) (ref window 2)) 5)))
+   ;;             (move-window 0 -1)
+   ;;             (loop)))
+
+   ;;       ((hero 'set-location)
+   ;;          newloc))
+
+   ;;    ((hero 'set-orientation)
+   ;;       (cond
+   ;;          ((> dx 0) 1)
+   ;;          ((< dx 0) 3)
+   ;;          ((> dy 0) 2)
+   ;;          ((< dy 0) 0)
+   ;;          (else
+   ;;             (hero 'get-orientation))))
+   ;; )
+
+   ;; (case key
+   ;;    (113 ; left
+   ;;       (move -0.051 0))
+   ;;    (114 ; right
+   ;;       (move +0.051 0))
+   ;;    (111 ; up
+   ;;       (move 0 -0.031))
+   ;;    (116 ; down
+   ;;       (move 0 +0.031))
+
+   ;;    (#x18 ; q - quit
+   ;;       ;(mail 'music ['shutdown])
+   ;;       (shutdown 1)))
+))
 
 ;; (gl:set-mouse-handler (lambda (button x y)
 ;;    (print "mouse: " button " (" x ", " y ")")
@@ -681,7 +771,7 @@
    ((unbox renderer) mouse)))
 
 ; -- game ----------------------------------
-(fork-server 'game (lambda ()
+(coroutine 'game (lambda ()
    (let this ((itself #empty))
    (let*((envelope (wait-mail))
          (sender msg envelope))

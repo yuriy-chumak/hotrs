@@ -12,35 +12,35 @@
 ; загрузить уровень
 ;  filename: имя xml файла в формате TILED
 (define (level:load filename)
-   (interact 'level ['load filename]))
+   (await (mail 'level ['load filename])))
 
 ; получить характеристику уровня
 ; список:
 ;  'tileheight: высота тайла в пикселях
 ;  'tilewidth: ширина тайла в пикселях
 (define (level:get property)
-   (interact 'level ['get property]))
+   (await (mail 'level ['get property])))
 (define (level:set property value)
    (mail 'level ['set property value]))
 
 ; получить слой уровня по имени
 (define (level:get-layer name)
-   (getf (interact 'level ['get 'layers]) name))
+   (getf (await (mail 'level ['get 'layers])) name))
 
 ; получить первый номер тайла, ассоциированный с тайлсетом name
 (define (level:get-gid name)
-   (getf (interact 'level ['get 'gids]) name))
+   (getf (await (mail 'level ['get 'gids])) name))
 
 ; возвращает количество тайлов в одной строке тайлсета name
 (define (level:get-columns name)
-   (getf (interact 'level ['get 'columns]) name))
+   (getf (await (mail 'level ['get 'columns])) name))
 
 ; нарисовать уровень
 ;  вызывать только изнутри цикла рендеринга
 ;  mouse - тайл под курсором
 ;  creatures - кого рисуем
 (define (level:draw creatures)
-   (interact 'level ['draw creatures]))
+   (await (mail 'level ['draw creatures])))
 
 ; -----------------------------------------------
 ; что касается "занятости" мира расчетами
@@ -51,7 +51,7 @@
    (car *calculating*))
 ; -----------------------------------------------
 
-(fork-server 'levels (lambda ()
+(coroutine 'levels (lambda ()
    (let this ((itself #empty))
       (let*((envelope (wait-mail))
             (sender msg envelope))
@@ -72,7 +72,7 @@
 (setq split-by-newline (string->regex "c/\n/"))
 
 ; гравная сопрограмму управления игровым уровнем
-(fork-server 'level (lambda ()
+(coroutine 'level (lambda ()
    (let this ((itself #empty))
       (let*((envelope (wait-mail))
             (sender msg envelope))
@@ -91,7 +91,7 @@
             (['load filename]
                (define fn (string->symbol filename))
 
-               (define loadedlevel (interact 'levels ['get fn]))
+               (define loadedlevel (await (mail 'levels ['get fn])))
                (define level
                   (if loadedlevel loadedlevel
                      ; если уровень еще не был прочитан - прочитаем:
@@ -397,6 +397,7 @@
                                  (glVertex2f x (+ y 1#|(ref tile 3)|#))
                               (glEnd)))))
 
+
                   (glColor3f 1 1 1)
                   (glEnable GL_TEXTURE_2D)
                   (define (draw-layer data entities)
@@ -484,3 +485,4 @@
             (else
                (print-to stderr "Unknown world command: " msg)
                (this itself)))))))
+

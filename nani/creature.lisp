@@ -8,7 +8,7 @@
 ;;    (mail creature ['set-location location]))
 ;; ; получить положение создания
 ;; (define (creature:get-location creature)
-;;    (interact creature ['get 'location]))
+;;    (await (mail creature ['get 'location])))
 
 ; задать поворот в пространстве
 ;; (define (creature:set-orientation creature orientation)
@@ -20,7 +20,7 @@
 
 ; выбрать созданию текущую анимацию по ее имени
 ;; (define (creature:set-current-animation creature animation)
-;;    (interact creature ['set-current-animation animation]))
+;;    (await (mail creature ['set-current-animation animation])))
 
 ;; (define (creature:set-next-location creature location)
 ;;    (mail creature ['set-next-location location]))
@@ -93,9 +93,9 @@
 ;; ;;                   (ff-fold (lambda (* key value)
 ;; ;;                               (cond
 ;; ;;                                  ((list? value)
-;; ;;                                     (for-each (lambda (id) (interact id ['debug])) value))
+;; ;;                                     (for-each (lambda (id) (await (mail id ['debug]))) value))
 ;; ;;                                  ((symbol? value)
-;; ;;                                     (interact value ['debug]))
+;; ;;                                     (await (mail value ['debug])))
 ;; ;;                                  (else
 ;; ;;                                     (print "unknown creature: " value)))
 ;; ;;                               #true)
@@ -124,8 +124,7 @@
    1 1 ; right
    2 2 ; bottom
    3 3 ; left
-}) ;left-top
-
+}) ; left-top
 
 
 (define-syntax make-setter
@@ -146,7 +145,7 @@
                ;(print "\x1B;[22;34m" (quote function) ":\x1B;[0m")
                . body)
             (lambda all
-               (interact name (cons (quote function) all)))
+               (await (mail name (cons (quote function) all))))
             ))))
 
 
@@ -157,7 +156,7 @@
 ;;             (lambda (this sender . args)
 ;;                . body)
 ;;             (lambda all
-;;                (interact name (list->tuple (cons (quote function) all))))
+;;                (await (mail name (list->tuple (cons (quote function) all)))))
 ;;             ))))
 
 ; ----------------------------------
@@ -229,6 +228,7 @@
                                  (* 100 frames))
                         ))
                      this))
+
                ; ...
                (make-getter (get-animation-frame this sender)
                   ; todo: change frames count according to animation type (and fix according math)
@@ -275,9 +275,9 @@
                   this)
             ))))
 
-   (print "starting thread: " name "(" (type name) ")")
+   ;(print "starting thread: " name "(" (type name) ")")
 
-   (fork-server name (lambda ()
+   (coroutine name (lambda ()
    (let this ((itself (car I)))
    (let*((envelope (wait-mail))
          (sender msg envelope))
