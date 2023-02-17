@@ -12,7 +12,12 @@
 ; загрузить уровень
 ;  filename: имя xml файла в формате TILED
 (define (level:load filename)
-   (await (mail 'level ['load filename])))
+   (await (mail 'level ['load filename]))
+   ;; (for-each (lambda (npc)
+   ;;       (unless ((npc 'get) 'state-machine)
+   ;;          #t))
+   ;;    (await (mail 'level ['get 'npcs]))))
+)
 
 ; получить характеристику уровня
 ; список:
@@ -150,7 +155,7 @@
                      (for-each display (list "preparing tileset ... "))
                      (define tileset
                      (fold (lambda (a b)
-                                 (ff-union a b #f))
+                                 (ff-union #f a b))
                         #empty
                         (map
                            (lambda (tileset)
@@ -222,6 +227,7 @@
                               (define coroutine (string->symbol (fold string-append
                                  name (list "/" ((if (symbol? key) symbol->string number->string) key)))))
                               (define npc (make-creature coroutine value))
+                              (print "npc value: " value)
 
                               ((npc 'set-location) (cons
                                  (value 'x)
@@ -254,19 +260,27 @@
                            {}
                            (fold (lambda (ff objectgroup)
                                     (fold (lambda (ff object)
-                                             (if (string-eq? (object 'type) "npc") (begin
+                                             (if (string-eq? (object 'class) "npc") (begin
                                                 ; npc id is a name as symbol or id as integer
                                                 (define name (object 'name #false))
                                                 (define id (if (and (string? name) (not (string-eq? name "")))
                                                                (string->symbol name) ; named npc?
                                                                (object 'id)))
+                                                (define ai (filter (lambda (property)
+                                                                     (string-eq? (property 'name "") "ai"))
+                                                               (vector->list (object 'properties #null))))
+                                                (define state-machine (unless (null? ai) (car ai)))
 
                                                 (put ff id {
                                                    'id  id
                                                    'name name
                                                    'gid (object 'gid)
                                                    'x (/ (object 'x) tilewidth)
-                                                   'y (/ (object 'y) tileheight) }))
+                                                   'y (/ (object 'y) tileheight)
+
+                                                   'ai state-machine ; название стейт-машины
+                                                   'state #false ; состояние npc
+                                                }))
                                              else ff))
                                        ff
                                        (vector->list (objectgroup 'objects []))))
@@ -281,7 +295,7 @@
                      (define portals
                         (fold (lambda (ff objectgroup)
                                  (fold (lambda (ff object)
-                                          (if (string-eq? (object 'type) "portal") (begin
+                                          (if (string-eq? (object 'class) "portal") (begin
                                              (define name (object 'name ""))
                                              (define target ((string->regex "c/\\//") name))
                                              (define id (object 'id))
@@ -308,7 +322,7 @@
                      (define spawns
                         (fold (lambda (ff objectgroup)
                                  (fold (lambda (ff object)
-                                          (if (string-eq? (object 'type "") "spawn") (begin
+                                          (if (string-eq? (object 'class "") "spawn") (begin
                                              (define name (object 'name ""))
 
                                              (define id (if (and (string? name) (not (string-eq? name "")))
@@ -319,7 +333,10 @@
                                              (put ff id {
                                                 'id id
                                                 'x (/ (object 'x) tilewidth)
-                                                'y (/ (object 'y) tileheight) }))
+                                                'y (/ (object 'y) tileheight)
+                                                'width (/ (object 'width) tilewidth)
+                                                'height (/ (object 'height) tileheight)
+                                             }))
                                           else ff))
                                     ff
                                     (vector->list (objectgroup 'objects []))))
@@ -458,15 +475,15 @@
                      #null)
 
                   ; временно нарисуем куда идет алистер и бамби
-                  (define alister ((itself 'npcs) 'alister))
-                  (if alister (let ((d ((alister 'get) 'destination)))
-                     (if d
-                        (draw-tile 26 (car d) (cdr d)))))
+                  ;; (define alister ((itself 'npcs) 'alister))
+                  ;; (if alister (let ((d ((alister 'get) 'destination)))
+                  ;;    (if d
+                  ;;       (draw-tile 26 (car d) (cdr d)))))
 
-                  (define bambi ((itself 'npcs) 'bambi))
-                  (if bambi (let ((d ((bambi 'get) 'destination)))
-                     (if d
-                        (draw-tile 25 (car d) (cdr d)))))
+                  ;; (define bambi ((itself 'npcs) 'bambi))
+                  ;; (if bambi (let ((d ((bambi 'get) 'destination)))
+                  ;;    (if d
+                  ;;       (draw-tile 25 (car d) (cdr d)))))
 
                   ; 2. теперь очередь движимых и недвижимых объектов
                   ;   так как движимые объекты должны уметь прятаться за недвижимые, то

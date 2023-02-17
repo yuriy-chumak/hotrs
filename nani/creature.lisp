@@ -3,122 +3,6 @@
 (import (owl parse))
 (import (file json))
 
-;; ; поместить создание на карту
-;; (define (creature:set-location creature location)
-;;    (mail creature ['set-location location]))
-;; ; получить положение создания
-;; (define (creature:get-location creature)
-;;    (await (mail creature ['get 'location])))
-
-; задать поворот в пространстве
-;; (define (creature:set-orientation creature orientation)
-;;    (mail creature ['set-orientation orientation]))
-
-; задать созданию набор анимаций (тайлсет, конфигурационный файл)
-;; (define (creature:set-animation-profile creature tileset inifile)
-;;    (mail creature ['set-animation-profile tileset inifile]))
-
-; выбрать созданию текущую анимацию по ее имени
-;; (define (creature:set-current-animation creature animation)
-;;    (await (mail creature ['set-current-animation animation])))
-
-;; (define (creature:set-next-location creature location)
-;;    (mail creature ['set-next-location location]))
-
-;; ; отыграть цикл анимации (с ожиданием)
-;; (define (creature:play-animation creature animation next-animation)
-;;    (let ((started (time-ms))
-;;          (saved-animation (or next-animation ((creature 'get) 'animation)))
-;;          (duration ((creature 'set-current-animation) animation)))
-;;       (let loop ((unused #f))
-;;          ;(print creature ": waiting for " (- (time-ms) started))
-;;          (if (< (- (time-ms) started) duration)
-;;             (loop (sleep 7))))
-;;       (unless (eq? saved-animation animation)
-;;          ; set next animation or restore saved
-;;          ((creature 'set-current-animation) saved-animation))))
-
-; двигаться (с анимацией)
-;; (define (creature:move-with-animation creature move animation next-animation)
-;;    (let ((started (time-ms))
-;;          (saved-animation (or next-animation ((creature 'get) 'animation)))
-;;          (location ((creature 'get-location)))
-;;          (duration ((creature 'set-current-animation) animation)))
-
-;;       (cond
-;;          ((equal? move '(0 . -1))
-;;             ((creature 'set-orientation) 0))
-;;          ((equal? move '(+1 . 0))
-;;             ((creature 'set-orientation) 2))
-;;          ((equal? move '(0 . +1))
-;;             ((creature 'set-orientation) 4))
-;;          ((equal? move '(-1 . 0))
-;;             ((creature 'set-orientation) 6)))
-;;       ((creature 'set-next-location) move)
-;;       (let loop ((unused #f))
-;;          ;(print creature ": waiting for " (- (time-ms) started))
-;;          (if (< (- (time-ms) started) duration)
-;;             (loop (sleep 7))))
-;;       ;(creature:set-next-location creature #f)
-;;       ((creature 'set-location) ; setting location automatically clears next-location
-;;          (cons (+ (car location) (car move))
-;;                (+ (cdr location) (cdr move))))
-
-;;       (unless (eq? saved-animation animation)
-;;          ; set next animation or restore saved
-;;          ((creature 'set-current-animation) saved-animation))))
-
-;; ; содержит список крич, где 0..N - npc, ну или по имени (например, 'hero - герой)
-;; (fork-server 'creatures (lambda ()
-;;    (let this ((itself #empty))
-;;       (let*((envelope (wait-mail))
-;;             (sender msg envelope))
-;;          (case msg
-;;             ; low level interaction interface
-;;             (['set key data]
-;;                (let ((itself (put itself key data)))
-;;                   (this itself)))
-;;             (['get key]
-;;                (mail sender (get itself key #false))
-;;                (this itself))
-;;             (['debug]
-;;                (mail sender itself)
-;;                (this itself))
-
-;; ;;             (['ready?]
-;; ;;                ; вот тут надо посетить каждого из npc и просто сделать ему interact,
-;; ;;                ; это позволит убедиться, что все npc закончили обдумывать свои дела
-;; ;;                ; и их наконец то можно рисовать
-;; ;;                (mail sender
-;; ;;                   (ff-fold (lambda (* key value)
-;; ;;                               (cond
-;; ;;                                  ((list? value)
-;; ;;                                     (for-each (lambda (id) (await (mail id ['debug]))) value))
-;; ;;                                  ((symbol? value)
-;; ;;                                     (await (mail value ['debug])))
-;; ;;                                  (else
-;; ;;                                     (print "unknown creature: " value)))
-;; ;;                               #true)
-;; ;;                      #t itself))
-;; ;;                (this itself))
-;; ;;             ;
-;;             (else
-;;                (print-to stderr "Unknown creatures command: " msg)
-;;                (this itself)))))))
-
-
-;; ; --------------------------
-;; ; имеет отношение к анимации:
-;; (define orientations (pairs->ff `(
-;;    (0 . 3) ; top
-;;    (1 . 4) ; top-right
-;;    (2 . 5) ; right
-;;    (3 . 6) ; right-bottom
-;;    (4 . 7) ; bottom
-;;    (5 . 0) ; left-bottom
-;;    (6 . 1) ; left
-;;    (7 . 2)))) ;left-top
-;; (define speed 64) ; 1 tile per second
 (define orientations {
    0 0 ; top
    1 1 ; right
@@ -148,16 +32,6 @@
                (await (mail name (cons (quote function) all))))
             ))))
 
-
-;; (define-syntax make-creature-macro
-;;    (syntax-rules (SET)
-;;       ((make-creature-macro (SET (function this sender . args) . body) . rest)
-;;          (list (quote function)
-;;             (lambda (this sender . args)
-;;                . body)
-;;             (lambda all
-;;                (await (mail name (list->tuple (cons (quote function) all)))))
-;;             ))))
 
 ; ----------------------------------
 ; todo: make automatic id generation

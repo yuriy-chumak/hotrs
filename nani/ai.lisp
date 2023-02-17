@@ -80,3 +80,24 @@
                                                       (cons (+ x 1) y)))))
                      (step1 (- n 1) c-list-set o-list-set))))))))
 
+; ---------------------------------------
+(import (lang sexp))
+(import (lang eval))
+
+(define environment *toplevel*)
+(coroutine 'ai (lambda ()
+(let loop ((this {}))
+(let*((envelope (wait-mail))
+      (sender msg envelope)) ; msg - string
+   (define name (string->symbol msg))
+   (define state-machine (or
+      (this name #f)
+      (let*((source (file->exp-stream (string-append "nani/ai/" msg ".ai") sexp-parser #f))
+            (source (force source))
+            (source (if source (car source)))
+            (state-machine (if source (eval source environment))))
+         (print "state-machine: " state-machine)
+         state-machine)))
+   (mail sender state-machine)
+   (loop (if state-machine (put this name state-machine) this))))))
+
